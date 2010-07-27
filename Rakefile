@@ -11,6 +11,9 @@ begin
     gem.homepage = "http://github.com/lapluviosilla/authlogic_crowd"
     gem.authors = ["Paul Strong"]
     gem.add_development_dependency "thoughtbot-shoulda", ">= 0"
+    gem.add_development_dependency "fcoury-matchy"
+    gem.add_development_dependency "rr"
+    gem.add_dependency "simple_crowd", ">= 0.1.1"
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
   end
   Jeweler::GemcutterTasks.new
