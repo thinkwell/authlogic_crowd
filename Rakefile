@@ -5,7 +5,7 @@ begin
   require 'jeweler'
   Jeweler::Tasks.new do |gem|
     gem.name = "authlogic_crowd"
-    gem.summary = %Q{TODO: one-line summary of your gem}
+    gem.summary = %Q{Atlassian Crowd support for Authlogic}
     gem.description = %Q{TODO: longer description of your gem}
     gem.email = "paul@thestrongfamily.org"
     gem.homepage = "http://github.com/lapluviosilla/authlogic_crowd"
