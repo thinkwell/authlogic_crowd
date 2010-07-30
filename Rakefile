@@ -6,13 +6,14 @@ begin
   Jeweler::Tasks.new do |gem|
     gem.name = "authlogic_crowd"
     gem.summary = %Q{Atlassian Crowd support for Authlogic}
-    gem.description = %Q{TODO: longer description of your gem}
+    gem.description = %Q{Authlogic Crowd}
     gem.email = "paul@thestrongfamily.org"
     gem.homepage = "http://github.com/lapluviosilla/authlogic_crowd"
     gem.authors = ["Paul Strong"]
     gem.add_development_dependency "thoughtbot-shoulda", ">= 0"
     gem.add_development_dependency "fcoury-matchy"
     gem.add_development_dependency "rr"
+    gem.add_dependency "authlogic", ">= 2.1.3"
     gem.add_dependency "simple_crowd", ">= 0.1.1"
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
   end
