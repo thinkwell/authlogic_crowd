@@ -136,12 +136,14 @@ module AuthlogicCrowd
           return false
         end
 
+        login = crowd_client.find_user_name_by_token user_token unless login
+
         send(:"#{crowd_user_token_field}=", user_token) if send(crowd_user_token_field).nil?
         controller.session[:"crowd.token_key"] = user_token unless session_user_token == user_token
         controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
                                                   :secure => crowd_cookie_info[:secure],
                                                   :value => user_token} unless cookie_user_token == user_token
-
+        
         if !self.unauthorized_record.nil? && self.unauthorized_record.login == login
           self.attempted_record = self.unauthorized_record
         else
