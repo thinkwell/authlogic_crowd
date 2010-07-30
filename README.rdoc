@@ -1,5 +1,6 @@
 = authlogic_crowd
 
+Incomplete Authlogic plugin for Atlassian Crowd ( do not use )
 Description goes here.
 
 == Note on Patches/Pull Requests
