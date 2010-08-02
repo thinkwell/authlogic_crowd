@@ -38,12 +38,23 @@ module AuthlogicCrowd
         rw_config(:crowd_user_token_field, value, :crowd_user_token)
       end
       alias_method :crowd_user_token_field=, :crowd_user_token_field
+
+      # Auto Register is enabled by default.
+	  # Add this in your Session object if you need to disable auto-registration via crowd
+      def auto_register(value=true)
+        auto_register_value(value)
+      end
+      def auto_register_value(value=nil)
+        rw_config(:auto_register,value,true)
+      end
+      alias_method :auto_register=,:auto_register
     end
     module Methods
       def self.included(klass)
         klass.class_eval do
           attr_accessor :new_registration
           validate :validate_by_crowd, :if => :authenticating_with_crowd?
+          persist :validate_by_crowd, :if => :authenticating_with_crowd?
           before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
         end
       end
@@ -68,6 +79,10 @@ module AuthlogicCrowd
         attempted_record && attempted_record.valid?
       end
 
+      def auto_register?
+        self.class.auto_register_value
+      end
+
       protected
 
       # Determines whether to use crowd to authenticate and validate the current request
@@ -77,7 +92,7 @@ module AuthlogicCrowd
         errors.empty? &&
         !self.class.crowd_app_name.blank? &&
         !self.class.crowd_app_password.blank? &&
-        (login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?) ||
+        ((login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)) ||
           controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
       end
 
@@ -117,11 +132,11 @@ module AuthlogicCrowd
       def validate_by_crowd
         begin
         load_crowd_app_token
-        login = send(login_field)
+        login = send(login_field) || (!unauthorized_record.nil? && unauthorized_record.login)
         password = send("protected_#{password_field}")
         session_user_token = controller.session[:"crowd.token_key"]
         cookie_user_token = controller.cookies[:"crowd.token_key"]
-        user_token = session_user_token || cookie_user_token
+        user_token = cookie_user_token || session_user_token
 
         if user_token && crowd_client.is_valid_user_token?(user_token)
         elsif login && password
@@ -136,7 +151,8 @@ module AuthlogicCrowd
           return false
         end
 
-        login = crowd_client.find_user_name_by_token user_token unless login
+        login = crowd_client.find_user_name_by_token user_token unless login && 
+                (!cookie_user_token || session_user_token == cookie_user_token)
 
         send(:"#{crowd_user_token_field}=", user_token) if send(crowd_user_token_field).nil?
         controller.session[:"crowd.token_key"] = user_token unless session_user_token == user_token
@@ -151,12 +167,20 @@ module AuthlogicCrowd
         end
 
         if !attempted_record
-          errors.add_to_base("We did not find any accounts with that login. Enter your details and create an account.")
-          return false
+          # If auto_register enabled then create new user with crowd info
+          if auto_register?
+            self.attempted_record = klass.new :login => login
+            self.new_registration = true
+            # TODO: Pull Crowd data for intial user
+            self.attempted_record.save_without_session_maintenance
+          else
+            errors.add_to_base("We did not find any accounts with that login. Enter your details and create an account.")
+            return false
+          end
         end
+        # TODO: Sync user with crowd data if this is a full blown login
         rescue Exception => e
           errors.add_to_base("Authentication failed. Please try again")
-          return false
         end
       end
 
