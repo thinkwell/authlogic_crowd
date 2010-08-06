@@ -24,6 +24,7 @@ Gem::Specification.new do |s|
      "authlogic_crowd.gemspec",
      "lib/authlogic_crowd.rb",
      "lib/authlogic_crowd/acts_as_authentic.rb",
+     "lib/authlogic_crowd/callbacks.rb",
      "lib/authlogic_crowd/session.rb",
      "test/helper.rb",
      "test/test_authlogic_crowd.rb"
@@ -47,20 +48,20 @@ Gem::Specification.new do |s|
       s.add_development_dependency(%q<fcoury-matchy>, [">= 0"])
       s.add_development_dependency(%q<rr>, [">= 0"])
       s.add_runtime_dependency(%q<authlogic>, [">= 2.1.3"])
-      s.add_runtime_dependency(%q<simple_crowd>, [">= 0.1.1"])
+      s.add_runtime_dependency(%q<simple_crowd>, [">= 0.1.5"])
     else
       s.add_dependency(%q<thoughtbot-shoulda>, [">= 0"])
       s.add_dependency(%q<fcoury-matchy>, [">= 0"])
       s.add_dependency(%q<rr>, [">= 0"])
       s.add_dependency(%q<authlogic>, [">= 2.1.3"])
-      s.add_dependency(%q<simple_crowd>, [">= 0.1.1"])
+      s.add_dependency(%q<simple_crowd>, [">= 0.1.5"])
     end
   else
     s.add_dependency(%q<thoughtbot-shoulda>, [">= 0"])
     s.add_dependency(%q<fcoury-matchy>, [">= 0"])
     s.add_dependency(%q<rr>, [">= 0"])
     s.add_dependency(%q<authlogic>, [">= 2.1.3"])
-    s.add_dependency(%q<simple_crowd>, [">= 0.1.1"])
+    s.add_dependency(%q<simple_crowd>, [">= 0.1.5"])
   end
 end
 

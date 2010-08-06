@@ -68,6 +68,9 @@ module AuthlogicCrowd
         super *args
       end
 
+      # Temporary storage of crowd record for syncing purposes
+      attr_accessor :crowd_record
+
       # Determines if the authenticated user is also a new registration.
       # For use in the session controller to help direct the most appropriate action to follow.
       def new_registration?
@@ -196,9 +199,12 @@ module AuthlogicCrowd
           elsif user_token
             crowd_client.find_user_by_token user_token
           end
-          if crowd_user
-            self.attempted_record.email = crowd_user.email
+          if crowd_user && before_sync
+            self.crowd_record = crowd_user
+            # Callbacks to sync data
+            sync
             self.attempted_record.save
+            after_sync
           end
         end
       end
