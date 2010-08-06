@@ -55,6 +55,7 @@ module AuthlogicCrowd
           attr_accessor :new_registration
           validate :validate_by_crowd, :if => :authenticating_with_crowd?
           persist :validate_by_crowd, :if => :authenticating_with_crowd?
+          after_create :sync_with_crowd, :if => :authenticating_with_crowd?
           before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
         end
       end
@@ -169,7 +170,8 @@ module AuthlogicCrowd
         if !attempted_record
           # If auto_register enabled then create new user with crowd info
           if auto_register?
-            self.attempted_record = klass.new :login => login
+            crowd_user = crowd_client.find_user_by_token user_token
+            self.attempted_record = klass.new :login => crowd_user.username, :email => crowd_user.email
             self.new_registration = true
             # TODO: Pull Crowd data for intial user
             self.attempted_record.save_without_session_maintenance
@@ -181,6 +183,23 @@ module AuthlogicCrowd
         # TODO: Sync user with crowd data if this is a full blown login
         rescue Exception => e
           errors.add_to_base("Authentication failed. Please try again")
+        end
+      end
+
+      def sync_with_crowd
+        # If it's a new registration then the crowd data was just pulled, so skip syncing on login
+        unless new_registration? || !self.attempted_record
+          login = send(login_field) || (!attempted_record.nil? && attempted_record.login)
+          user_token = controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
+          crowd_user = if login
+            crowd_client.find_user_by_name login
+          elsif user_token
+            crowd_client.find_user_by_token user_token
+          end
+          if crowd_user
+            self.attempted_record.email = crowd_user.email
+            self.attempted_record.save
+          end
         end
       end
 
