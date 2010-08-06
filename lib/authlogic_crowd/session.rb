@@ -39,6 +39,13 @@ module AuthlogicCrowd
       end
       alias_method :crowd_user_token_field=, :crowd_user_token_field
 
+      # Single Signout (defaults to true)
+      # @param [Boolean] value
+      def crowd_sso(value=nil)
+        rw_config(:crowd_sso, value, true)
+      end
+      alias_method :crowd_sso=, :crowd_sso
+
       # Auto Register is enabled by default.
 	  # Add this in your Session object if you need to disable auto-registration via crowd
       def auto_register(value=true)
@@ -56,7 +63,7 @@ module AuthlogicCrowd
           validate :validate_by_crowd, :if => :authenticating_with_crowd?
           persist :validate_by_crowd, :if => :authenticating_with_crowd?
           after_create :sync_with_crowd, :if => :authenticating_with_crowd?
-          before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
+          before_destroy :logout_of_crowd, :if => [:authenticating_with_crowd?, :sso?]
         end
       end
 
@@ -104,6 +111,10 @@ module AuthlogicCrowd
         !authenticating_with_crowd? && login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)
       end
 
+      def sso?
+        self.class.crowd_sso
+      end
+
 #      def credentials
 #        if authenticating_with_crowd?
 #          details = {}
@@ -139,7 +150,7 @@ module AuthlogicCrowd
         login = send(login_field) || (!unauthorized_record.nil? && unauthorized_record.login)
         password = send("protected_#{password_field}")
         session_user_token = controller.session[:"crowd.token_key"]
-        cookie_user_token = controller.cookies[:"crowd.token_key"]
+        cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
         user_token = cookie_user_token || session_user_token
 
         if user_token && crowd_client.is_valid_user_token?(user_token)
@@ -162,7 +173,7 @@ module AuthlogicCrowd
         controller.session[:"crowd.token_key"] = user_token unless session_user_token == user_token
         controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
                                                   :secure => crowd_cookie_info[:secure],
-                                                  :value => user_token} unless cookie_user_token == user_token
+                                                  :value => user_token} unless cookie_user_token == user_token || !sso?
         
         if !self.unauthorized_record.nil? && self.unauthorized_record.login == login
           self.attempted_record = self.unauthorized_record
@@ -209,8 +220,10 @@ module AuthlogicCrowd
         end
       end
 
+      # Single Sign-out
+      # TODO: Add configuration parameter to make this optional
       def logout_of_crowd
-        # Send an invalidate call
+        # Send an invalidate call for single signout
         # Apparently there is no way of knowing if this was successful or not.
         crowd_client.invalidate_user_token crowd_user_token unless crowd_user_token.nil?
         # Remove cookie and session
