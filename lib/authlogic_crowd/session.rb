@@ -7,32 +7,6 @@ module AuthlogicCrowd
       end
     end
     module Config
-      # **REQUIRED**
-      #
-      # Specify your crowd service url.
-      # @param [String] url to use when calling Crowd
-      def crowd_service_url(url=nil)
-        rw_config(:crowd_service_url, url, "http://localhost:8095/crowd/services/SecurityServer")
-      end
-      alias_method :crowd_service_url=, :crowd_service_url
-
-      # **REQUIRED**
-      #
-      # Specify your crowd app name.
-      # @param [String] name of app to use when calling Crowd
-      def crowd_app_name(name=nil)
-        rw_config(:crowd_app_name, name, nil)
-      end
-      alias_method :crowd_app_name=, :crowd_app_name
-
-      # **REQUIRED**
-      #
-      # Specify your crowd app password.
-      # @param [String] password Plain-text password for crowd app validation
-      def crowd_app_password(password=nil)
-        rw_config(:crowd_app_password, password, nil)
-      end
-      alias_method :crowd_app_password=, :crowd_app_password
 
       def crowd_user_token_field(value = nil)
         rw_config(:crowd_user_token_field, value, :crowd_user_token)
@@ -98,11 +72,12 @@ module AuthlogicCrowd
 
       # Determines whether to use crowd to authenticate and validate the current request
       # For now we assume the app wants to use Crowd exclusively.
+      # Use crowd authentication if tokens are present or if login/password is available but not valid or is blank in db
       # TODO: Add flexibility regarding multiple authentication methods and identity mapping
       def authenticating_with_crowd?
         errors.empty? &&
-        !self.class.crowd_app_name.blank? &&
-        !self.class.crowd_app_password.blank? &&
+        !klass.crowd_app_name.blank? &&
+        !klass.crowd_app_password.blank? &&
         ((login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)) ||
           controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
       end
@@ -166,7 +141,7 @@ module AuthlogicCrowd
           return false
         end
 
-        login = crowd_client.find_user_name_by_token user_token unless login && 
+        login = crowd_client.find_username_by_token user_token unless login && 
                 (!cookie_user_token || session_user_token == cookie_user_token)
 
         send(:"#{crowd_user_token_field}=", user_token) if send(crowd_user_token_field).nil?
@@ -231,11 +206,12 @@ module AuthlogicCrowd
         controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain]
       end
 
-      def crowd_client
-        @crowd_client ||= SimpleCrowd::Client.new(crowd_config)
-      end
+
       def crowd_user_token
         controller.session[:"crowd.token_key"]|| controller.cookies[:"crowd.token_key"] || send(crowd_user_token_field)
+      end
+      def crowd_client
+        @crowd_client ||= SimpleCrowd::Client.new(crowd_config)
       end
       def load_crowd_app_token
         cached_token = Rails.cache.read('crowd_app_token')
@@ -251,9 +227,9 @@ module AuthlogicCrowd
         @crowd_cookie_info
       end
       def crowd_config
-        {:service_url => self.class.crowd_service_url,
-          :app_name => self.class.crowd_app_name,
-          :app_password => self.class.crowd_app_password}
+        {:service_url => klass.crowd_service_url,
+          :app_name => klass.crowd_app_name,
+          :app_password => klass.crowd_app_password}
       end
       def crowd_user_token_field; self.class.crowd_user_token_field; end
     end
