@@ -8,17 +8,16 @@ module AuthlogicCrowd
     end
     module Config
 
-      def crowd_user_token_field(value = nil)
-        rw_config(:crowd_user_token_field, value, :crowd_user_token)
-      end
-      alias_method :crowd_user_token_field=, :crowd_user_token_field
-
       # Single Signout (defaults to true)
       # @param [Boolean] value
       def crowd_sso(value=nil)
         rw_config(:crowd_sso, value, true)
       end
       alias_method :crowd_sso=, :crowd_sso
+      
+      def crowd_sso?
+        crowd_sso
+      end
 
       # Auto Register is enabled by default.
 	  # Add this in your Session object if you need to disable auto-registration via crowd
@@ -29,6 +28,24 @@ module AuthlogicCrowd
         rw_config(:auto_register,value,true)
       end
       alias_method :auto_register=,:auto_register
+
+      def crowd_user_token= token
+        session_user_token = controller.session[:"crowd.token_key"]
+        cookie_user_token = crowd_sso? && controller.cookies[:"crowd.token_key"]
+        cached_info = Rails.cache.read('crowd_cookie_info')
+        @crowd_client ||= SimpleCrowd::Client.new({
+          :service_url => klass.crowd_service_url,
+          :app_name => klass.crowd_app_name,
+          :app_password => klass.crowd_app_password})
+        crowd_cookie_info ||= cached_info || @crowd_client.get_cookie_info
+        controller.session[:"crowd.token_key"] = token unless session_user_token == token
+        controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
+                                                  :secure => crowd_cookie_info[:secure],
+                                                  :value => token} unless cookie_user_token == token || !crowd_sso?
+      end
+      def crowd_user_token
+        controller.cookies[:"crowd.token_key"]|| controller.session[:"crowd.token_key"]
+      end
     end
     module Methods
       def self.included(klass)
@@ -39,14 +56,6 @@ module AuthlogicCrowd
           after_create :sync_with_crowd, :if => :authenticating_with_crowd?
           before_destroy :logout_of_crowd, :if => [:authenticating_with_crowd?, :sso?]
         end
-      end
-
-      def initialize(*args)
-        if crowd_user_token_field
-          self.class.send(:attr_writer, crowd_user_token_field) if !respond_to?("#{crowd_user_token_field}=")
-          self.class.send(:attr_reader, crowd_user_token_field) if !respond_to?(crowd_user_token_field)
-        end
-        super *args
       end
 
       # Temporary storage of crowd record for syncing purposes
@@ -126,7 +135,7 @@ module AuthlogicCrowd
         password = send("protected_#{password_field}")
         session_user_token = controller.session[:"crowd.token_key"]
         cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
-        user_token = cookie_user_token || session_user_token
+        user_token = crowd_user_token
 
         if user_token && crowd_client.is_valid_user_token?(user_token)
         elsif login && password
@@ -136,19 +145,12 @@ module AuthlogicCrowd
           user_token = nil
         end
 
-        if user_token.blank?
-          errors.add_to_base("Authentication failed. Please try again.")
-          return false
-        end
+        raise "No user token" if user_token.blank?
 
         login = crowd_client.find_username_by_token user_token unless login && 
                 (!cookie_user_token || session_user_token == cookie_user_token)
-
-        send(:"#{crowd_user_token_field}=", user_token) if send(crowd_user_token_field).nil?
-        controller.session[:"crowd.token_key"] = user_token unless session_user_token == user_token
-        controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
-                                                  :secure => crowd_cookie_info[:secure],
-                                                  :value => user_token} unless cookie_user_token == user_token || !sso?
+        
+        self.class.crowd_user_token = user_token
         
         if !self.unauthorized_record.nil? && self.unauthorized_record.login == login
           self.attempted_record = self.unauthorized_record
@@ -172,6 +174,9 @@ module AuthlogicCrowd
         # TODO: Sync user with crowd data if this is a full blown login
         rescue Exception => e
           errors.add_to_base("Authentication failed. Please try again")
+          controller.session[:"crowd.token_key"] = nil
+          controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
+          false
         end
       end
 
@@ -203,12 +208,12 @@ module AuthlogicCrowd
         crowd_client.invalidate_user_token crowd_user_token unless crowd_user_token.nil?
         # Remove cookie and session
         controller.session[:"crowd.token_key"] = nil
-        controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain]
+        controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
       end
 
 
       def crowd_user_token
-        controller.session[:"crowd.token_key"]|| controller.cookies[:"crowd.token_key"] || send(crowd_user_token_field)
+        self.class.crowd_user_token
       end
       def crowd_client
         @crowd_client ||= SimpleCrowd::Client.new(crowd_config)
@@ -231,7 +236,6 @@ module AuthlogicCrowd
           :app_name => klass.crowd_app_name,
           :app_password => klass.crowd_app_password}
       end
-      def crowd_user_token_field; self.class.crowd_user_token_field; end
     end
   end
 end
