@@ -47,24 +47,25 @@ module AuthlogicCrowd
       def self.included(klass)
         klass.class_eval do
           validate_on_create :must_have_unique_crowd_login
-          
+
+          # TODO: Cleanup and refactor into callbacks
           def create
-            if using_crowd?
+            if using_crowd? && !crowd_record
               crowd_user = self.create_crowd_user
               if crowd_user
                 # Crowd is going to store password so clear them from local object
                 self.clear_passwords
                 result = super
                 # Delete crowd user if local creation failed
-                crowd_client.delete_user crowd_user.name unless result
+                crowd_client.delete_user crowd_user.user unless result
                 if result
-                  user_token = crowd_client.create_user_token crowd_user.name
+                  user_token = crowd_client.create_user_token crowd_user.username
                   session_class.crowd_user_token = user_token unless session_class.controller.session[:"crowd.token_key"]
                 end
                 return result
               end
             end
-            true
+            super
           end
           #validates_length_of_password_field_options validates_length_of_password_field_options.merge(:if => :validate_password_with_crowd?)
           #validates_confirmation_of_password_field_options validates_confirmation_of_password_field_options.merge(:if => :validate_password_with_crowd?)
@@ -75,6 +76,7 @@ module AuthlogicCrowd
       attr_accessor :crowd_record
 
       protected
+
       def create_crowd_user
         return unless self.login && @password
         self.crowd_record = SimpleCrowd::User.new({:username => self.login})

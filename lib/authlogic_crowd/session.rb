@@ -127,7 +127,7 @@ module AuthlogicCrowd
       # Main session validation using Crowd user token.
       # Uses simple_crowd to verify the user token on the configured crowd server
       # If no *local* user is found and auto_register is enabled (default) then automatically create *local* user for them
-      # TODO: Create user on crowd side if nonexistant(?)
+      # TODO: Cleanup and figure out reason for duplicate calls
       def validate_by_crowd
         begin
         load_crowd_app_token
@@ -164,6 +164,7 @@ module AuthlogicCrowd
             crowd_user = crowd_client.find_user_by_token user_token
             self.attempted_record = klass.new :login => crowd_user.username, :email => crowd_user.email
             self.new_registration = true
+            self.attempted_record.crowd_record = crowd_user
             # TODO: Pull Crowd data for intial user
             self.attempted_record.save_without_session_maintenance
           else
@@ -171,7 +172,6 @@ module AuthlogicCrowd
             return false
           end
         end
-        # TODO: Sync user with crowd data if this is a full blown login
         rescue Exception => e
           errors.add_to_base("Authentication failed. Please try again")
           controller.session[:"crowd.token_key"] = nil
@@ -201,7 +201,6 @@ module AuthlogicCrowd
       end
 
       # Single Sign-out
-      # TODO: Add configuration parameter to make this optional
       def logout_of_crowd
         # Send an invalidate call for single signout
         # Apparently there is no way of knowing if this was successful or not.
