@@ -137,6 +137,13 @@ module AuthlogicCrowd
         cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
         user_token = crowd_user_token
 
+        # Lets see if the user passed in an email or a login using the db
+        if !login.empty? && self.unauthorized_record.nil?
+          self.unauthorized_record = klass.send(:login_or_email_equals, login).first
+          # If passed in login equals the user email then get the REAL login used by crowd instead
+          login = unauthorized_record.login if !unauthorized_record.nil? && login = unauthorized_record.email
+        end
+
         if user_token && crowd_client.is_valid_user_token?(user_token)
         elsif login && password
           # Authenticate if we don't have token
