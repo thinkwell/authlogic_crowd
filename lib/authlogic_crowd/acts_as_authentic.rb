@@ -67,9 +67,9 @@ module AuthlogicCrowd
             end
             super
           end
-          #validates_length_of_password_field_options validates_length_of_password_field_options.merge(:if => :validate_password_with_crowd?)
-          #validates_confirmation_of_password_field_options validates_confirmation_of_password_field_options.merge(:if => :validate_password_with_crowd?)
-          #validates_length_of_password_confirmation_field_options validates_length_of_password_confirmation_field_options.merge(:if => :validate_password_with_crowd?)
+          validates_length_of_password_field_options validates_length_of_password_field_options.merge(:on => :create)
+          validates_confirmation_of_password_field_options validates_confirmation_of_password_field_options.merge(:on => :create)
+          validates_length_of_password_confirmation_field_options validates_length_of_password_confirmation_field_options.merge(:on => :create)
         end
       end
 
