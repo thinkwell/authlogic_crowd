@@ -96,7 +96,7 @@ module AuthlogicCrowd
       def must_have_unique_crowd_login
         login = send(self.class.login_field)
         crowd_user = crowd_client.find_user_by_name(login)
-        errors.add(self.class.login_field, "is already taken") unless crowd_user.nil?
+        errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).empty?
       end
 
       def crowd_client
