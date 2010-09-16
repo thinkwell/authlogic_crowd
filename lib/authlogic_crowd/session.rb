@@ -44,7 +44,7 @@ module AuthlogicCrowd
                                                   :value => token} unless cookie_user_token == token || !crowd_sso?
       end
       def crowd_user_token
-        controller.cookies[:"crowd.token_key"]|| controller.session[:"crowd.token_key"]
+        controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
       end
     end
     module Methods
@@ -88,7 +88,7 @@ module AuthlogicCrowd
         !klass.crowd_app_name.blank? &&
         !klass.crowd_app_password.blank? &&
         ((login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)) ||
-          controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
+          controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"] || controller.params["crowd.token_key"])
       end
 
       def authenticating_with_password?
@@ -131,14 +131,15 @@ module AuthlogicCrowd
       def validate_by_crowd
         begin
         load_crowd_app_token
-        login = send(login_field) || (!unauthorized_record.nil? && unauthorized_record.login)
+        login = send(login_field) || unauthorized_record.andand.login
         password = send("protected_#{password_field}")
+        params_user_token = controller.params["crowd.token_key"]
         session_user_token = controller.session[:"crowd.token_key"]
         cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
         user_token = crowd_user_token
 
         # Lets see if the user passed in an email or a login using the db
-        if !login.empty? && self.unauthorized_record.nil?
+        if !login.blank? && self.unauthorized_record.nil?
           self.unauthorized_record = klass.send(:login_or_email_equals, login).first
           # If passed in login equals the user email then get the REAL login used by crowd instead
           login = unauthorized_record.login if !unauthorized_record.nil? && login = unauthorized_record.email
@@ -155,7 +156,8 @@ module AuthlogicCrowd
         raise "No user token" if user_token.blank?
 
         login = crowd_client.find_username_by_token user_token unless login && 
-                (!cookie_user_token || session_user_token == cookie_user_token)
+                (!cookie_user_token || session_user_token == cookie_user_token) &&
+                (!params_user_token || session_user_token == params_user_token)
         
         self.class.crowd_user_token = user_token
         
@@ -191,7 +193,7 @@ module AuthlogicCrowd
         # If it's a new registration then the crowd data was just pulled, so skip syncing on login
         unless new_registration? || !self.attempted_record
           login = send(login_field) || (!attempted_record.nil? && attempted_record.login)
-          user_token = controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
+          user_token = controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
           crowd_user = if login
             crowd_client.find_user_by_name login
           elsif user_token
