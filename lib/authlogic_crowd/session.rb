@@ -183,7 +183,11 @@ module AuthlogicCrowd
         end
         rescue Exception => e
           errors.add_to_base("Authentication failed. Please try again")
-          controller.session[:"crowd.token_key"] = nil
+          # Don't know why it doesn't work the first time,
+          # but if we nil the session key here then the session doesn't get deleted
+          # Leaving the token triggers the validation a second time and successfully destroys the session
+          # REMOVED AS HACK
+          # controller.session[:"crowd.token_key"] = nil
           controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           false
         end
