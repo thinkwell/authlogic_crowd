@@ -187,7 +187,13 @@ module AuthlogicCrowd
           # but if we nil the session key here then the session doesn't get deleted
           # Leaving the token triggers the validation a second time and successfully destroys the session
           # REMOVED AS HACK
-          # controller.session[:"crowd.token_key"] = nil
+          # Hack to fix user_credentials not being deleted on session destroy
+          controller.session[:"crowd.token_key"] = nil
+          unless (send(login_field) || unauthorized_record.andand.login && send("protected_#{password_field}"))
+            controller.current_user_session.destroy
+            controller.session.clear
+          end
+          controller.cookies.delete :user_credentials
           controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           false
         end
@@ -221,6 +227,8 @@ module AuthlogicCrowd
         # Remove cookie and session
         controller.session[:"crowd.token_key"] = nil
         controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
+        controller.cookies.delete :user_credentials
+        true
       end
 
 
