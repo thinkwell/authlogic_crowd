@@ -137,6 +137,7 @@ module AuthlogicCrowd
         session_user_token = controller.session[:"crowd.token_key"]
         cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
         user_token = crowd_user_token
+        crowd_user = nil
 
         # Lets see if the user passed in an email or a login using the db
         if !login.blank? && self.unauthorized_record.nil?
@@ -148,7 +149,16 @@ module AuthlogicCrowd
         if user_token && crowd_client.is_valid_user_token?(user_token)
         elsif login && password
           # Authenticate if we don't have token
-          user_token = crowd_client.authenticate_user login, password
+          user_token = crowd_client.authenticate_user login, password rescue nil
+
+          # Try one last time to login with crowd email field instead of login
+          if user_token.nil? && self.unauthorized_record.nil? && login =~ Authlogic::Regex.email
+            crowd_user ||= crowd_client.find_user_by_email(login)
+            if crowd_user
+              login = crowd_user.username
+              user_token = crowd_client.authenticate_user login, password rescue nil
+            end
+          end
         else
           user_token = nil
         end
@@ -158,23 +168,25 @@ module AuthlogicCrowd
         login = crowd_client.find_username_by_token user_token unless login && 
                 (!cookie_user_token || session_user_token == cookie_user_token) &&
                 (!params_user_token || session_user_token == params_user_token)
+        send("#{login_field}=", login)
         
         self.class.crowd_user_token = user_token
         
         if !self.unauthorized_record.nil? && self.unauthorized_record.login == login
           self.attempted_record = self.unauthorized_record
         else
-          self.attempted_record = klass.send(:"find_by_#{login_field}", login)
+          self.attempted_record = self.unauthorized_record = klass.send(:"find_by_#{login_field}", login)
         end
 
         if !attempted_record
           # If auto_register enabled then create new user with crowd info
           if auto_register?
-            crowd_user = crowd_client.find_user_by_token user_token
+            crowd_user ||= crowd_client.find_user_by_token user_token
             self.attempted_record = klass.new :login => crowd_user.username, :email => crowd_user.email
             self.new_registration = true
             self.attempted_record.crowd_record = crowd_user
-            # TODO: Pull Crowd data for intial user
+            self.crowd_record = crowd_user
+            sync
             self.attempted_record.save_without_session_maintenance
           else
             errors.add_to_base("We did not find any accounts with that login. Enter your details and create an account.")
@@ -190,7 +202,9 @@ module AuthlogicCrowd
           # Hack to fix user_credentials not being deleted on session destroy
           controller.session[:"crowd.token_key"] = nil
           unless (send(login_field) || unauthorized_record.andand.login && send("protected_#{password_field}"))
-            controller.current_user_session.destroy
+            # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
+            # This is to avoid a infinite recursive session creation bug we had a while back
+            controller.instance_eval{ @current_user_session }.andand.destroy
             controller.session.clear
           end
           controller.cookies.delete :user_credentials
