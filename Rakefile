@@ -14,7 +14,7 @@ begin
     gem.add_development_dependency "fcoury-matchy"
     gem.add_development_dependency "rr"
     gem.add_dependency "authlogic", ">= 2.1.3"
-    gem.add_dependency "simple_crowd", ">= 0.1.6"
+    gem.add_dependency "simple_crowd", ">= 0.3.1"
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
   end
   Jeweler::GemcutterTasks.new
