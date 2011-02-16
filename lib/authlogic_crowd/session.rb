@@ -131,7 +131,7 @@ module AuthlogicCrowd
       def validate_by_crowd
         begin
         load_crowd_app_token
-        login = send(login_field) || unauthorized_record.andand.login
+        login = send(login_field) || (unauthorized_record && unauthorized_record.login)
         password = send("protected_#{password_field}")
         params_user_token = controller.params["crowd.token_key"]
         session_user_token = controller.session[:"crowd.token_key"]
@@ -141,7 +141,7 @@ module AuthlogicCrowd
 
         # Lets see if the user passed in an email or a login using the db
         if !login.blank? && self.unauthorized_record.nil?
-          self.unauthorized_record = klass.send(:login_or_email_equals, login).first
+          self.unauthorized_record = klass.send("find_by_#{login_field}", login)
           # If passed in login equals the user email then get the REAL login used by crowd instead
           login = unauthorized_record.login if !unauthorized_record.nil? && login = unauthorized_record.email
         end
@@ -201,10 +201,11 @@ module AuthlogicCrowd
           # REMOVED AS HACK
           # Hack to fix user_credentials not being deleted on session destroy
           controller.session[:"crowd.token_key"] = nil
-          unless (send(login_field) || unauthorized_record.andand.login && send("protected_#{password_field}"))
+          unless (send(login_field) || (unauthorized_record && unauthorized_record.login) && send("protected_#{password_field}"))
             # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
             # This is to avoid a infinite recursive session creation bug we had a while back
-            controller.instance_eval{ @current_user_session }.andand.destroy
+            curr_session = controller.instance_eval{ @current_user_session }
+            curr_session.destroy if curr_session
             controller.session.clear
           end
           controller.cookies.delete :user_credentials
