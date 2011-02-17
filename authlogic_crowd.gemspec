@@ -12,9 +12,28 @@ Gem::Specification.new do |s|
   s.extra_rdoc_files = [
     "README.rdoc"
   ]
-  s.files = `git ls-files`.split("\n")
-  s.test_files = `git ls-files -- {test,spec,features}/*`.split("\n")
-  s.homepage = %q{http://github.com/lapluviosilla/simple_crowd}
+  s.files = %w(
+    .document
+    .gitignore
+    Gemfile
+    Gemfile.lock
+    README.rdoc
+    Rakefile
+    authlogic_crowd.gemspec
+    lib/authlogic_crowd.rb
+    lib/authlogic_crowd/acts_as_authentic.rb
+    lib/authlogic_crowd/acts_as_authentic_callbacks.rb
+    lib/authlogic_crowd/session.rb
+    lib/authlogic_crowd/session_callbacks.rb
+    lib/authlogic_crowd/version.rb
+    test/helper.rb
+    test/test_authlogic_crowd.rb
+  )
+  s.test_files = %w(
+    test/helper.rb
+    test/test_authlogic_crowd.rb
+  )
+  s.homepage = %q{http://github.com/lapluviosilla/authlogic_crowd}
   s.require_paths = ["lib"]
   s.rubygems_version = %q{1.3.7}
   s.summary = %q{Atlassian Crowd support for Authlogic}
