@@ -60,7 +60,8 @@ module AuthlogicCrowd
                 crowd_client.delete_user crowd_user.user unless result
                 if result
                   user_token = crowd_client.create_user_token crowd_user.username
-                  session_class.crowd_user_token = user_token unless session_class.controller.session[:"crowd.token_key"]
+                  session_class.crowd_user_token = user_token unless
+                      session_class.controller && session_class.controller.session[:"crowd.token_key"]
                 end
                 return result
               end

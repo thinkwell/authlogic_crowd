@@ -30,21 +30,21 @@ module AuthlogicCrowd
       alias_method :auto_register=,:auto_register
 
       def crowd_user_token= token
-        session_user_token = controller.session[:"crowd.token_key"]
-        cookie_user_token = crowd_sso? && controller.cookies[:"crowd.token_key"]
+        session_user_token = controller && controller.session[:"crowd.token_key"]
+        cookie_user_token = crowd_sso? && controller && controller.cookies[:"crowd.token_key"]
         cached_info = Rails.cache.read('crowd_cookie_info')
         @crowd_client ||= SimpleCrowd::Client.new({
           :service_url => klass.crowd_service_url,
           :app_name => klass.crowd_app_name,
           :app_password => klass.crowd_app_password})
         crowd_cookie_info ||= cached_info || @crowd_client.get_cookie_info
-        controller.session[:"crowd.token_key"] = token unless session_user_token == token
+        controller.session[:"crowd.token_key"] = token unless session_user_token == token || !controller
         controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
                                                   :secure => crowd_cookie_info[:secure],
-                                                  :value => token} unless cookie_user_token == token || !crowd_sso?
+                                                  :value => token} unless cookie_user_token == token || !crowd_sso? || !controller
       end
       def crowd_user_token
-        controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
+        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
       end
     end
     module Methods
@@ -88,7 +88,7 @@ module AuthlogicCrowd
         !klass.crowd_app_name.blank? &&
         !klass.crowd_app_password.blank? &&
         ((login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)) ||
-          controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"] || controller.params["crowd.token_key"])
+          controller && (controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"] || controller.params["crowd.token_key"]))
       end
 
       def authenticating_with_password?
@@ -133,9 +133,9 @@ module AuthlogicCrowd
         load_crowd_app_token
         login = send(login_field) || (unauthorized_record && unauthorized_record.login)
         password = send("protected_#{password_field}")
-        params_user_token = controller.params["crowd.token_key"]
-        session_user_token = controller.session[:"crowd.token_key"]
-        cookie_user_token = sso? && controller.cookies[:"crowd.token_key"]
+        params_user_token = controller && controller.params["crowd.token_key"]
+        session_user_token = controller && controller.session[:"crowd.token_key"]
+        cookie_user_token = sso? && controller && controller.cookies[:"crowd.token_key"]
         user_token = crowd_user_token
         crowd_user = nil
 
@@ -200,16 +200,19 @@ module AuthlogicCrowd
           # Leaving the token triggers the validation a second time and successfully destroys the session
           # REMOVED AS HACK
           # Hack to fix user_credentials not being deleted on session destroy
-          controller.session[:"crowd.token_key"] = nil
-          unless (send(login_field) || (unauthorized_record && unauthorized_record.login) && send("protected_#{password_field}"))
-            # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
-            # This is to avoid a infinite recursive session creation bug we had a while back
-            curr_session = controller.instance_eval{ @current_user_session }
-            curr_session.destroy if curr_session
-            controller.session.clear
+
+          if controller
+            controller.session[:"crowd.token_key"] = nil
+            unless (send(login_field) || (unauthorized_record && unauthorized_record.login) && send("protected_#{password_field}"))
+              # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
+              # This is to avoid a infinite recursive session creation bug we had a while back
+              curr_session = controller.instance_eval{ @current_user_session }
+              curr_session.destroy if curr_session
+              controller.session.clear
+            end
+            controller.cookies.delete :user_credentials
+            controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           end
-          controller.cookies.delete :user_credentials
-          controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           false
         end
       end
@@ -218,7 +221,7 @@ module AuthlogicCrowd
         # If it's a new registration then the crowd data was just pulled, so skip syncing on login
         unless new_registration? || !self.attempted_record
           login = send(login_field) || (!attempted_record.nil? && attempted_record.login)
-          user_token = controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"]
+          user_token = controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
           crowd_user = if login
             crowd_client.find_user_by_name login
           elsif user_token
@@ -240,9 +243,11 @@ module AuthlogicCrowd
         # Apparently there is no way of knowing if this was successful or not.
         crowd_client.invalidate_user_token crowd_user_token unless crowd_user_token.nil?
         # Remove cookie and session
-        controller.session[:"crowd.token_key"] = nil
-        controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
-        controller.cookies.delete :user_credentials
+        if controller
+          controller.session[:"crowd.token_key"] = nil
+          controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
+          controller.cookies.delete :user_credentials
+        end
         true
       end
 
