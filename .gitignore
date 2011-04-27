@@ -23,3 +23,4 @@ pkg
 .yardoc
 
 ## PROJECT::SPECIFIC
+Gemfile.lock

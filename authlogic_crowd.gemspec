@@ -41,8 +41,8 @@ Gem::Specification.new do |s|
   s.add_development_dependency(%q<thoughtbot-shoulda>, [">= 0"])
   s.add_development_dependency(%q<fcoury-matchy>, [">= 0"])
   s.add_development_dependency(%q<rr>, [">= 0"])
-  s.add_runtime_dependency(%q<authlogic>, [">= 2.1.3"])
-  s.add_runtime_dependency(%q<simple_crowd>, [">= 0.1.6"])
+  s.add_runtime_dependency(%q<authlogic>, [">= 2.1.3", "< 3.0.0"])
+  s.add_runtime_dependency(%q<simple_crowd>, [">= 1.0.0"])
 
 end
 
