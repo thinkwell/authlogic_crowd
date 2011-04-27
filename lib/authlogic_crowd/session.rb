@@ -141,7 +141,9 @@ module AuthlogicCrowd
 
         # Lets see if the user passed in an email or a login using the db
         if !login.blank? && self.unauthorized_record.nil?
-          self.unauthorized_record = klass.send("find_by_#{login_field}", login)
+          self.unauthorized_record = klass.respond_to?(:login_or_email_equals) ?
+                                         klass.send(:login_or_email_equals, login).first :
+                                         klass.send("find_by_#{login_field}", login)
           # If passed in login equals the user email then get the REAL login used by crowd instead
           login = unauthorized_record.login if !unauthorized_record.nil? && login = unauthorized_record.email
         end
