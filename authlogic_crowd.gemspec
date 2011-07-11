@@ -16,7 +16,6 @@ Gem::Specification.new do |s|
     .document
     .gitignore
     Gemfile
-    Gemfile.lock
     README.rdoc
     Rakefile
     authlogic_crowd.gemspec
