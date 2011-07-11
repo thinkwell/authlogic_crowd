@@ -208,8 +208,9 @@ module AuthlogicCrowd
             unless (send(login_field) || (unauthorized_record && unauthorized_record.login) && send("protected_#{password_field}"))
               # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
               # This is to avoid a infinite recursive session creation bug we had a while back
+              curr_klass = klass
               curr_session = controller.instance_eval do
-                self.instance_variable_get("@current_#{klass.name.underscore}_session") || @current_user_session
+                self.instance_variable_get("@current_#{curr_klass.name.underscore}_session") || @current_user_session
               end
               curr_session.destroy if curr_session
               controller.session.clear
