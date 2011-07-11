@@ -209,15 +209,12 @@ module AuthlogicCrowd
               # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
               # This is to avoid a infinite recursive session creation bug we had a while back
               curr_klass = klass
-              curr_session = controller.instance_eval do
-                self.instance_variable_get("@current_#{curr_klass.name.underscore}_session") || @current_user_session
-              end
+              curr_session = controller.instance_eval { @current_user_session }
               curr_session.destroy if curr_session
               controller.session.clear
             end
             # Delete by klass name instead of generic user
             controller.cookies.delete :"#{klass.name.underscore}_credentials"
-            controller.cookies.delete :"user_credentials"
             controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           end
           false
@@ -254,7 +251,6 @@ module AuthlogicCrowd
           controller.session[:"crowd.token_key"] = nil
           controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           controller.cookies.delete :"#{klass.name.underscore}_credentials"
-          controller.cookies.delete :user_credentials
         end
         true
       end
