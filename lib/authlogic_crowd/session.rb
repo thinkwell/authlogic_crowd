@@ -216,6 +216,7 @@ module AuthlogicCrowd
             end
             # Delete by klass name instead of generic user
             controller.cookies.delete :"#{klass.name.underscore}_credentials"
+            controller.cookies.delete :"user_credentials"
             controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           end
           false
@@ -251,7 +252,8 @@ module AuthlogicCrowd
         if controller
           controller.session[:"crowd.token_key"] = nil
           controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
-           controller.cookies.delete :"#{klass.name.underscore}_credentials"
+          controller.cookies.delete :"#{klass.name.underscore}_credentials"
+          controller.cookies.delete :user_credentials
         end
         true
       end
