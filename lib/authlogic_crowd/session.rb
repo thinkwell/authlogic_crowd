@@ -196,6 +196,7 @@ module AuthlogicCrowd
           end
         end
         rescue Exception => e
+          raise
           errors.add_to_base("Authentication failed. Please try again")
           # Don't know why it doesn't work the first time,
           # but if we nil the session key here then the session doesn't get deleted
