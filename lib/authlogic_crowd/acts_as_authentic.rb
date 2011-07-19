@@ -46,7 +46,7 @@ module AuthlogicCrowd
     module Methods
       def self.included(klass)
         klass.class_eval do
-          validate_on_create :must_have_unique_crowd_login
+          validate_on_create :must_have_unique_crowd_login, :if => :using_crowd?, :unless => :crowd_record
 
           # TODO: Cleanup and refactor into callbacks
           def create
