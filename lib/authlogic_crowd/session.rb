@@ -165,7 +165,7 @@ module AuthlogicCrowd
           user_token = nil
         end
 
-        raise "No user token" if user_token.blank?
+        raise SimpleCrowd::CrowdError.new "No user token" if user_token.blank?
 
         login = crowd_client.find_username_by_token user_token unless login && 
                 (!cookie_user_token || session_user_token == cookie_user_token) &&
@@ -217,6 +217,7 @@ module AuthlogicCrowd
             controller.cookies.delete :"#{klass.name.underscore}_credentials"
             controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           end
+          raise if e.kind_of? SimpleCrowd::CrowdError
           false
         end
       end
