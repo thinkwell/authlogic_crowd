@@ -217,7 +217,7 @@ module AuthlogicCrowd
             controller.cookies.delete :"#{klass.name.underscore}_credentials"
             controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
           end
-          raise if e.kind_of? SimpleCrowd::CrowdError
+          raise unless e.kind_of? SimpleCrowd::CrowdError
           false
         end
       end
