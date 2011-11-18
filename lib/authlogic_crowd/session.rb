@@ -30,6 +30,7 @@ module AuthlogicCrowd
       alias_method :auto_register=,:auto_register
 
       def crowd_user_token= token
+        token = token.dup if token
         session_user_token = controller && controller.session[:"crowd.token_key"]
         cookie_user_token = crowd_sso? && controller && controller.cookies[:"crowd.token_key"]
         cached_info = Rails.cache.read('crowd_cookie_info')
