@@ -30,6 +30,7 @@ module AuthlogicCrowd
       alias_method :auto_register=,:auto_register
 
       def crowd_user_token= token
+        # Dup token before storing to make sure we store a pure string to avoid session serialization issues.
         token = token.dup if token
         session_user_token = controller && controller.session[:"crowd.token_key"]
         cookie_user_token = crowd_sso? && controller && controller.cookies[:"crowd.token_key"]
