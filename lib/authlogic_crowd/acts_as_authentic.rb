@@ -42,6 +42,10 @@ module AuthlogicCrowd
       end
       alias_method :crowd_user_token_field=, :crowd_user_token_field
 
+      def crowd_enabled(value=nil)
+        rw_config(:crowd_enabled, value, true)
+      end
+
     end
     module Methods
       def self.included(klass)
@@ -123,7 +127,7 @@ module AuthlogicCrowd
       end
 
       def using_crowd?
-        !(self.class.crowd_app_name.nil? || self.class.crowd_app_password.nil? || self.class.crowd_service_url.nil?)
+        self.class.crowd_enabled && !(self.class.crowd_app_name.nil? || self.class.crowd_app_password.nil? || self.class.crowd_service_url.nil?)
       end
 
       def validate_password_with_crowd?
