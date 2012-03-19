@@ -38,7 +38,7 @@ module AuthlogicCrowd
           :service_url => klass.crowd_service_url,
           :app_name => klass.crowd_app_name,
           :app_password => klass.crowd_app_password})
-        crowd_cookie_info = Rails.cache.fetch('crowd_cookie_info') { @crowd_client.get_cookie_info }
+        crowd_cookie_info = self.crowd_cookie_info(@crowd_client)
         controller.session[:"crowd.token_key"] = token unless session_user_token == token || !controller
         controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
                                                   :secure => crowd_cookie_info[:secure],
@@ -46,6 +46,18 @@ module AuthlogicCrowd
       end
       def crowd_user_token
         controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
+      end
+
+      def crowd_cookie_info(crowd_client)
+        Rails.cache.fetch('crowd_cookie_info') do
+          # Strings returned by crowd contain singleton methods which cannot
+          # be serialized into the Rails.cache.  Do a shallow dup of each string
+          # in the returned hash
+          crowd_client.get_cookie_info.inject({}) do |cookie_info, (key, val)|
+            cookie_info[key] = val ? val.dup : val
+            cookie_info
+          end
+        end
       end
     end
     module Methods
@@ -278,15 +290,7 @@ module AuthlogicCrowd
         crowd_app_token
       end
       def crowd_cookie_info
-        @crowd_cookie_info ||= Rails.cache.fetch('crowd_cookie_info') do
-          # Strings returned by crowd contain singleton methods which cannot
-          # be serialized into the Rails.cache.  Do a shallow dup of each string
-          # in the returned hash
-          crowd_client.get_cookie_info.inject({}) do |cookie_info, (key, val)|
-            cookie_info[key] = val ? val.dup : val
-            cookie_info
-          end
-        end
+        @crowd_cookie_info ||= self.class.crowd_cookie_info(crowd_client)
       end
       def crowd_config
         {:service_url => klass.crowd_service_url,
