@@ -34,12 +34,11 @@ module AuthlogicCrowd
         token = token.dup if token
         session_user_token = controller && controller.session[:"crowd.token_key"]
         cookie_user_token = crowd_sso? && controller && controller.cookies[:"crowd.token_key"]
-        cached_info = Rails.cache.read('crowd_cookie_info')
         @crowd_client ||= SimpleCrowd::Client.new({
           :service_url => klass.crowd_service_url,
           :app_name => klass.crowd_app_name,
           :app_password => klass.crowd_app_password})
-        crowd_cookie_info ||= cached_info || @crowd_client.get_cookie_info
+        crowd_cookie_info = Rails.cache.fetch('crowd_cookie_info') { @crowd_client.get_cookie_info }
         controller.session[:"crowd.token_key"] = token unless session_user_token == token || !controller
         controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
                                                   :secure => crowd_cookie_info[:secure],
@@ -266,17 +265,28 @@ module AuthlogicCrowd
         @crowd_client ||= SimpleCrowd::Client.new(crowd_config)
       end
       def load_crowd_app_token
-        cached_token = Rails.cache.read('crowd_app_token')
-        crowd_client.app_token = cached_token unless cached_token.nil?
-        Rails.cache.write('crowd_app_token', crowd_client.app_token) unless cached_token == crowd_client.app_token
+        crowd_app_token = Rails.cache.read('crowd_app_token')
+        if crowd_app_token.nil?
+          crowd_app_token = crowd_client.app_token
+          # Strings returned by crowd contain singleton methods which cannot
+          # be serialized into the Rails.cache.  Duping the strings removes the
+          # singleton methods.
+          Rails.cache.write('crowd_app_token', crowd_app_token.dup)
+        else
+          crowd_client.app_token = crowd_app_token
+        end
+        crowd_app_token
       end
       def crowd_cookie_info
-        unless @crowd_cookie_info
-          cached_info = Rails.cache.read('crowd_cookie_info')
-          @crowd_cookie_info ||= cached_info || crowd_client.get_cookie_info
-          Rails.cache.write('crowd_cookie_info', @crowd_cookie_info) unless cached_info == @crowd_cookie_info
+        @crowd_cookie_info ||= Rails.cache.fetch('crowd_cookie_info') do
+          # Strings returned by crowd contain singleton methods which cannot
+          # be serialized into the Rails.cache.  Do a shallow dup of each string
+          # in the returned hash
+          crowd_client.get_cookie_info.inject({}) do |cookie_info, (key, val)|
+            cookie_info[key] = val ? val.dup : val
+            cookie_info
+          end
         end
-        @crowd_cookie_info
       end
       def crowd_config
         {:service_url => klass.crowd_service_url,
