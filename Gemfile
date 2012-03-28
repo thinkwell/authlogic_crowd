@@ -1,4 +1,4 @@
 source "http://rubygems.org"
 
-# Specify your gem's dependencies in simple_crowd.gemspec
+# Specify your gem's dependencies in authlogic_crowd.gemspec
 gemspec
