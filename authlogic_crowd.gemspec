@@ -32,7 +32,7 @@ Gem::Specification.new do |s|
     test/helper.rb
     test/test_authlogic_crowd.rb
   )
-  s.homepage = %q{http://github.com/lapluviosilla/authlogic_crowd}
+  s.homepage = %q{http://github.com/thinkwell/authlogic_crowd}
   s.require_paths = ["lib"]
   s.rubygems_version = %q{1.3.7}
   s.summary = %q{Atlassian Crowd support for Authlogic}
