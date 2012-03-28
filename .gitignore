@@ -21,6 +21,7 @@ pkg
 .bundle
 .idea
 .yardoc
+.rvmrc
 
 ## PROJECT::SPECIFIC
 Gemfile.lock
