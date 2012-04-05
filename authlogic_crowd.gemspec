@@ -25,12 +25,6 @@ Gem::Specification.new do |s|
     lib/authlogic_crowd/session.rb
     lib/authlogic_crowd/session_callbacks.rb
     lib/authlogic_crowd/version.rb
-    test/helper.rb
-    test/test_authlogic_crowd.rb
-  )
-  s.test_files = %w(
-    test/helper.rb
-    test/test_authlogic_crowd.rb
   )
   s.homepage = %q{http://github.com/thinkwell/authlogic_crowd}
   s.require_paths = ["lib"]
