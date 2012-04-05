@@ -3,76 +3,44 @@ module AuthlogicCrowd
     def self.included(klass)
       klass.class_eval do
         extend Config
-        include Methods
+        include InstanceMethods
+
+        attr_accessor :new_registration
+
+        persist :persist_by_crowd, :if => :authenticating_with_crowd?
+        validate :validate_by_crowd, :if => [:authenticating_with_crowd?, :needs_crowd_validation?]
+        after_create :sync_with_crowd, :if => :authenticating_with_crowd?
+        before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
       end
     end
+
+    # Configuration for the crowd feature.
     module Config
 
-      # Single Signout (defaults to true)
-      # @param [Boolean] value
-      def crowd_sso(value=nil)
-        rw_config(:crowd_sso, value, true)
+      # How often should Crowd re-authorize (in seconds).  Default is 0 (always re-authorize)
+      def crowd_auth_every(value = nil)
+        rw_config(:crowd_auth_every, value, 0)
       end
-      alias_method :crowd_sso=, :crowd_sso
-      
-      def crowd_sso?
-        crowd_sso
-      end
+      alias_method :crowd_auth_every=, :crowd_auth_every
 
       # Auto Register is enabled by default.
-	  # Add this in your Session object if you need to disable auto-registration via crowd
+	    # Add this in your Session object if you need to disable auto-registration via crowd
       def auto_register(value=true)
         auto_register_value(value)
       end
+
       def auto_register_value(value=nil)
         rw_config(:auto_register,value,true)
       end
-      alias_method :auto_register=,:auto_register
-
-      def crowd_user_token= token
-        # Dup token before storing to make sure we store a pure string to avoid session serialization issues.
-        token = token.dup if token
-        session_user_token = controller && controller.session[:"crowd.token_key"]
-        cookie_user_token = crowd_sso? && controller && controller.cookies[:"crowd.token_key"]
-        @crowd_client ||= SimpleCrowd::Client.new({
-          :service_url => klass.crowd_service_url,
-          :app_name => klass.crowd_app_name,
-          :app_password => klass.crowd_app_password})
-        crowd_cookie_info = self.crowd_cookie_info(@crowd_client)
-        controller.session[:"crowd.token_key"] = token unless session_user_token == token || !controller
-        controller.cookies[:"crowd.token_key"] = {:domain => crowd_cookie_info[:domain],
-                                                  :secure => crowd_cookie_info[:secure],
-                                                  :value => token} unless cookie_user_token == token || !crowd_sso? || !controller
-      end
-      def crowd_user_token
-        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
-      end
-
-      def crowd_cookie_info(crowd_client)
-        Rails.cache.fetch('crowd_cookie_info') do
-          # Strings returned by crowd contain singleton methods which cannot
-          # be serialized into the Rails.cache.  Do a shallow dup of each string
-          # in the returned hash
-          crowd_client.get_cookie_info.inject({}) do |cookie_info, (key, val)|
-            cookie_info[key] = val ? val.dup : val
-            cookie_info
-          end
-        end
-      end
+      alias_method :auto_register=, :auto_register
     end
-    module Methods
-      def self.included(klass)
-        klass.class_eval do
-          attr_accessor :new_registration
-          validate :validate_by_crowd, :if => :authenticating_with_crowd?
-          persist :validate_by_crowd, :if => :authenticating_with_crowd?
-          after_create :sync_with_crowd, :if => :authenticating_with_crowd?
-          before_destroy :logout_of_crowd, :if => [:authenticating_with_crowd?, :sso?]
-        end
-      end
 
-      # Temporary storage of crowd record for syncing purposes
-      attr_accessor :crowd_record
+    module InstanceMethods
+
+      def initialize(*args)
+        super
+        @valid_crowd_user = {}
+      end
 
       # Determines if the authenticated user is also a new registration.
       # For use in the session controller to help direct the most appropriate action to follow.
@@ -80,222 +48,316 @@ module AuthlogicCrowd
         new_registration || !new_registration.nil?
       end
 
-      # Determines if the authenticated user has a complete registration (no validation errors)
-      # For use in the session controller to help direct the most appropriate action to follow.
-      def registration_complete?
-        attempted_record && attempted_record.valid?
-      end
-
       def auto_register?
         self.class.auto_register_value
       end
 
-      protected
-
-      # Determines whether to use crowd to authenticate and validate the current request
-      # For now we assume the app wants to use Crowd exclusively.
-      # Use crowd authentication if tokens are present or if login/password is available but not valid or is blank in db
-      # TODO: Add flexibility regarding multiple authentication methods and identity mapping
-      def authenticating_with_crowd?
-        errors.empty? &&
-        !klass.crowd_app_name.blank? &&
-        !klass.crowd_app_password.blank? &&
-        ((login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)) ||
-          controller && (controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"] || controller.params["crowd.token_key"]))
-      end
-
-      def authenticating_with_password?
-        !authenticating_with_crowd? && login_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)
-      end
-
-      def sso?
-        self.class.crowd_sso
-      end
-
-#      def credentials
-#        if authenticating_with_crowd?
-#          details = {}
-#          details[login_field.to_sym] = send(login_field)
-#          details[password_field.to_sym] = "<protected>"
-#          details[crowd_user_token_field.to_sym] = send(crowd_user_token_field)
-#          details
-#        else
-#          super
-#        end
-#      end
-
-      def credentials=(value)
-        super
-        values = value.is_a?(Array) ? value : [value]
-        if values.first.is_a?(Hash)
-          values.first.with_indifferent_access.slice(login_field, password_field).each do |field, value|
-            next if value.blank?
-            send("#{field}=", value)
+      def crowd_record
+        if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:record)
+          crowd_client_with_app_token do |crowd_client|
+            @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
           end
         end
+
+        @valid_crowd_user[:record]
+      end
+
+      def crowd_client
+        @crowd_client ||= klass.crowd_client
+      end
+
+      def crowd_client_with_app_token(&block)
+        klass.crowd_client_with_app_token(crowd_client, &block)
       end
 
       private
 
-      # Main session validation using Crowd user token.
-      # Uses simple_crowd to verify the user token on the configured crowd server
-      # If no *local* user is found and auto_register is enabled (default) then automatically create *local* user for them
-      # TODO: Cleanup and figure out reason for duplicate calls
+      def authenticating_with_crowd?
+        has_crowd_user_token? || has_crowd_credentials?
+      end
+
+      # Use the Crowd to "log in" the user using the crowd.token_key
+      # cookie/parameter.  If the token_key is valid and returns a valid Crowd
+      # user, the find_by_login_method is called to find the appropriate local
+      # user/record.
+      #
+      # If no *local* record is found and auto_register is enabled (default)
+      # then automatically create *local* record for them.
+      #
+      # This method enables a Crowd user to log in without having to explicity
+      # log in to this app.  Once a Crowd user has authenticated with this app
+      # via this method, future requests usually use the Authlogic::Session
+      # module to persist/find users.
+      def persist_by_crowd
+        clear_crowd_auth_cache
+        return false unless has_crowd_user_token? && valid_crowd_user_token? && crowd_username
+        self.unauthorized_record = find_or_create_record_by_crowd
+        valid?
+      rescue SimpleCrowd::CrowdError => e
+        Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
+        return false
+      end
+
+      # Validates the current record/user with Crowd.  This validates the
+      # crowd.token_key cookie/parameter and/or explicit credentials.
+      #
+      # If a crowd.token_key exists and matches a previously authenticated
+      # token_key, this method will only verify the token with crowd if the
+      # last authorization was more than crowd_auth_every seconds ago (see
+      # the crowd_auth_every config option).
       def validate_by_crowd
-        begin
-        load_crowd_app_token
-        login = send(login_field) || (unauthorized_record && unauthorized_record.login)
-        password = send("protected_#{password_field}")
-        params_user_token = controller && controller.params["crowd.token_key"]
-        session_user_token = controller && controller.session[:"crowd.token_key"]
-        cookie_user_token = sso? && controller && controller.cookies[:"crowd.token_key"]
-        user_token = crowd_user_token
-        crowd_user = nil
+        # Credentials trump a crowd.token_key.
+        # We don't even attempt to authenticated from the token key if
+        # credentials are present.
+        if has_crowd_credentials?
+          # HACK: Remove previous login/password errors since we are going to
+          # try to validate them with crowd
+          errors.instance_variable_get('@errors').delete(login_field.to_s)
+          errors.instance_variable_get('@errors').delete(password_field.to_s)
 
-        # Lets see if the user passed in an email or a login using the db
-        if !login.blank? && self.unauthorized_record.nil?
-          self.unauthorized_record = klass.respond_to?(:login_or_email_equals) ?
-                                         klass.send(:login_or_email_equals, login).first :
-                                         klass.send(find_by_login_method, login)
-          # If passed in login equals the user email then get the REAL login used by crowd instead
-          login = unauthorized_record.login if !unauthorized_record.nil? && login = unauthorized_record.email
-        end
-
-        if user_token && crowd_client.is_valid_user_token?(user_token)
-        elsif login && password
-          # Authenticate if we don't have token
-          user_token = crowd_client.authenticate_user login, password rescue nil
-
-          # Try one last time to login with crowd email field instead of login
-          if user_token.nil? && self.unauthorized_record.nil? && login =~ Authlogic::Regex.email
-            crowd_user ||= crowd_client.find_user_by_email(login)
-            if crowd_user
-              login = crowd_user.username
-              user_token = crowd_client.authenticate_user login, password rescue nil
+          if valid_crowd_credentials?
+            self.attempted_record = find_or_create_record_by_crowd
+            unless self.attempted_record
+              errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid"))
             end
-          end
-        else
-          user_token = nil
-        end
-
-        raise SimpleCrowd::CrowdError.new "No user token" if user_token.blank?
-
-        login = crowd_client.find_username_by_token user_token unless login && 
-                (!cookie_user_token || session_user_token == cookie_user_token) &&
-                (!params_user_token || session_user_token == params_user_token)
-        send("#{login_field}=", login)
-        
-        self.class.crowd_user_token = user_token
-        
-        if !self.unauthorized_record.nil? && self.unauthorized_record.login == login
-          self.attempted_record = self.unauthorized_record
-        else
-          self.attempted_record = self.unauthorized_record = klass.send(find_by_login_method, login)
-        end
-
-        if !attempted_record
-          # If auto_register enabled then create new user with crowd info
-          if auto_register?
-            crowd_user ||= crowd_client.find_user_by_token user_token
-            self.attempted_record = klass.new :login => crowd_user.username, :email => crowd_user.email
-            self.new_registration = true
-            self.attempted_record.crowd_record = crowd_user
-            self.crowd_record = crowd_user
-            sync
-            self.attempted_record.save_without_session_maintenance
           else
-            errors.add_to_base("We did not find any accounts with that login. Enter your details and create an account.")
-            return false
+            errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid")) if !@valid_crowd_user[:username]
+            errors.add(password_field, I18n.t('error_messages.password_invalid', :default => "is not valid")) if @valid_crowd_user[:username]
           end
-        end
-        rescue Exception => e
-          errors.add_to_base("Authentication failed. Please try again")
-          # Don't know why it doesn't work the first time,
-          # but if we nil the session key here then the session doesn't get deleted
-          # Leaving the token triggers the validation a second time and successfully destroys the session
-          # REMOVED AS HACK
-          # Hack to fix user_credentials not being deleted on session destroy
 
-          if controller
-            controller.session[:"crowd.token_key"] = nil
-            unless (send(login_field) || (unauthorized_record && unauthorized_record.login) && send("protected_#{password_field}"))
-              # Hack to try and check session without recreating it. (we only want to destroy it if it exists already)
-              # This is to avoid a infinite recursive session creation bug we had a while back
-              curr_klass = klass
-              curr_session = controller.instance_eval { @current_user_session }
-              curr_session.destroy if curr_session
-              controller.session.clear
-            end
-            # Delete by klass name instead of generic user
-            controller.cookies.delete :"#{klass.name.underscore}_credentials"
-            controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
+        elsif has_crowd_user_token?
+          unless valid_crowd_user_token? && valid_crowd_username?
+            errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
           end
-          raise unless e.kind_of? SimpleCrowd::CrowdError
-          false
         end
+
+        unless self.attempted_record.valid?
+          errors.add_to_base('record is not valid')
+        end
+
+        if errors.count == 0
+          # Set crowd.token_key cookie
+          save_crowd_cookie
+
+          # Cache crowd authorization to make future requests faster (if
+          # crowd_auth_every config is enabled)
+          cache_crowd_auth
+        end
+      rescue SimpleCrowd::CrowdError => e
+        Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
+        errors.add_to_base("Crowd error: #{e}")
+      end
+
+      # Validate the crowd.token_key (if one exists)
+      # Uses simple_crowd to verify the user token on the configured crowd server.
+      # This only checks that the token is valid with Crowd.  It does not check
+      # that the token belongs to a valid local user/record.
+      def valid_crowd_user_token?
+        unless @valid_crowd_user.has_key?(:user_token)
+          @valid_crowd_user[:user_token] = nil
+          user_token = crowd_user_token
+          if user_token
+            crowd_client_with_app_token do |crowd_client|
+              if crowd_client.is_valid_user_token?(user_token)
+                @valid_crowd_user[:user_token] = user_token
+              end
+            end
+          end
+        end
+        !!@valid_crowd_user[:user_token]
+      end
+
+      # Validate username/password using Crowd.
+      # Uses simple_crowd to verify credentials on the configured crowd server.
+      def valid_crowd_credentials?
+        login = send(login_field)
+        password = send("protected_#{password_field}")
+        return false unless login && password
+
+        unless @valid_crowd_user.has_key?(:credentials)
+          @valid_crowd_user[:user_token] = nil
+
+          crowd_client_with_app_token do |crowd_client|
+            # Authenticate using login/password
+            user_token = crowd_fetch {crowd_client.authenticate_user(login, password)}
+            if user_token
+              @valid_crowd_user[:user_token] = user_token
+              @valid_crowd_user[:username] = login
+            else
+              # See if the login exists
+              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_name(login)}
+              @valid_crowd_user[:username] = crecord ? crecord.username : nil
+            end
+
+            # Attempt to find user with crowd email field instead of principal name
+            if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
+              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
+              if crecord
+                user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
+                @valid_crowd_user[:username] = crecord.username
+                @valid_crowd_user[:user_token] = user_token if user_token
+              end
+            end
+          end
+
+          @valid_crowd_user[:credentials] = !!@valid_crowd_user[:user_token]
+        end
+
+        @valid_crowd_user[:credentials]
+      end
+
+      # Validate the crowd username against the current record
+      def valid_crowd_username?
+        record_login = send(login_field) || (unauthorized_record && unauthorized_record.login)
+
+        # Use the last username if available to reduce crowd calls
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] == controller.session[:"crowd.last_user_token"]
+          crowd_login = controller.session[:"crowd.last_username"]
+        end
+        crowd_login = crowd_username unless crowd_login
+
+        crowd_login && crowd_login == record_login
+      end
+
+      def crowd_username
+        if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:username)
+          crecord = crowd_record
+          @valid_crowd_user[:username] = crecord ? crecord.username : nil
+        end
+
+        @valid_crowd_user[:username]
+      end
+
+      def cache_crowd_auth
+        if @valid_crowd_user[:user_token]
+          controller.session[:"crowd.last_auth"] = Time.now
+          controller.session[:"crowd.last_user_token"] = @valid_crowd_user[:user_token].dup
+          controller.session[:"crowd.last_username"] = @valid_crowd_user[:username].dup if @valid_crowd_user[:username]
+          Rails.logger.debug "CROWD: Cached crowd authorization (#{controller.session[:"crowd.last_username"]}).  Next authorization at #{Time.now + self.class.crowd_auth_every}." if self.class.crowd_auth_every.to_i > 0
+        else
+          clear_crowd_auth_cache
+        end
+      end
+
+      # Clear cached crowd information
+      def clear_crowd_auth_cache
+        controller.session.delete_if {|key, val| ["crowd.last_user_token", "crowd.last_auth", "crowd.last_username"].include?(key.to_s)}
+      end
+
+      def save_crowd_cookie
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token
+          controller.params.delete("crowd.token_key")
+          controller.cookies[:"crowd.token_key"] = {
+            :domain => crowd_cookie_info[:domain],
+            :secure => crowd_cookie_info[:secure],
+            :value => @valid_crowd_user[:user_token],
+          }
+        end
+      end
+
+      def destroy_crowd_cookie
+        controller.cookies.delete(:"crowd.token_key", :domain => crowd_cookie_info[:domain])
+      end
+
+      # When the crowd_auth_every config option is set and the user is logged
+      # in via crowd, validation can be skipped in certain cases (token_key
+      # matches last token_key and last authorization was less than
+      # crowd_auth_every seconds).
+      def needs_crowd_validation?
+        res = true
+        if !has_crowd_credentials? && has_crowd_user_token? && self.class.crowd_auth_every.to_i > 0
+          last_user_token = controller.session[:"crowd.last_user_token"]
+          last_auth = controller.session[:"crowd.last_auth"]
+          if last_user_token
+            if last_user_token != crowd_user_token
+              Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
+            elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
+              Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
+            elsif !last_auth
+              Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
+            else
+              res = false
+            end
+          end
+        end
+        res
+      end
+
+      def find_or_create_record_by_crowd
+        return nil unless crowd_username
+        record = search_for_record(find_by_login_method, crowd_username)
+
+        if !record && auto_register?
+          record = klass.new :login => crowd_username, :email => crowd_record.email
+          self.new_registration = true
+          old_record = self.record
+          self.record = record
+          crowd_sync
+          self.record = old_record
+          #save_record(record)
+        end
+
+        record
       end
 
       def sync_with_crowd
         # If it's a new registration then the crowd data was just pulled, so skip syncing on login
-        unless new_registration? || !self.attempted_record
-          login = send(login_field) || (!attempted_record.nil? && attempted_record.login)
-          user_token = controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || controller.session[:"crowd.token_key"])
-          crowd_user = if login
-            crowd_client.find_user_by_name login
-          elsif user_token
-            crowd_client.find_user_by_token user_token
-          end
-          if crowd_user && before_sync
-            self.crowd_record = crowd_user
-            # Callbacks to sync data
-            sync
-            self.attempted_record.save
-            after_sync
-          end
+        return if new_registration?
+
+        return unless self.attempted_record
+
+        if crowd_record && before_crowd_sync
+          crowd_sync
+          #save_record
+          after_crowd_sync
         end
       end
 
-      # Single Sign-out
+      # Logout of crowd and remove the crowd cookie.
       def logout_of_crowd
-        # Send an invalidate call for single signout
-        # Apparently there is no way of knowing if this was successful or not.
-        crowd_client.invalidate_user_token crowd_user_token unless crowd_user_token.nil?
-        # Remove cookie and session
-        if controller
-          controller.session[:"crowd.token_key"] = nil
-          controller.cookies.delete :"crowd.token_key", :domain => crowd_cookie_info[:domain] if sso?
-          controller.cookies.delete :"#{klass.name.underscore}_credentials"
+        if crowd_user_token
+          # Send an invalidate call for single signout
+          # Apparently there is no way of knowing if this was successful or not.
+          begin
+            crowd_client_with_app_token do |crowd_client|
+              crowd_client.invalidate_user_token(crowd_user_token) rescue nil
+            end
+          rescue SimpleCrowd::CrowdError => e
+            Rails.logger.debug "CROWD: logout_of_crowd #{e.message}"
+          end
         end
+
+        controller.params.delete("crowd.token_key")
+        destroy_crowd_cookie
+        clear_crowd_auth
         true
       end
 
-
       def crowd_user_token
-        self.class.crowd_user_token
+        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"])
       end
-      def crowd_client
-        @crowd_client ||= SimpleCrowd::Client.new(crowd_config)
+
+      def has_crowd_user_token?
+        !!crowd_user_token
       end
-      def load_crowd_app_token
-        crowd_app_token = Rails.cache.read('crowd_app_token')
-        if crowd_app_token.nil?
-          crowd_app_token = crowd_client.app_token
-          # Strings returned by crowd contain singleton methods which cannot
-          # be serialized into the Rails.cache.  Duping the strings removes the
-          # singleton methods.
-          Rails.cache.write('crowd_app_token', crowd_app_token.dup)
-        else
-          crowd_client.app_token = crowd_app_token
-        end
-        crowd_app_token
+
+      def has_crowd_credentials?
+        login_field && password_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)
       end
+
       def crowd_cookie_info
-        @crowd_cookie_info ||= self.class.crowd_cookie_info(crowd_client)
+        @crowd_cookie_info ||= klass.crowd_cookie_info(crowd_client)
       end
-      def crowd_config
-        {:service_url => klass.crowd_service_url,
-          :app_name => klass.crowd_app_name,
-          :app_password => klass.crowd_app_password}
+
+      # Executes the given block, returning nil if a SimpleCrowd::CrowdError
+      # ocurrs.
+      def crowd_fetch
+        begin
+          yield
+        rescue SimpleCrowd::CrowdError => e
+          Rails.logger.debug "CROWD[#{caller[0][/`.*'/][1..-2]}]: #{e.message}"
+          nil
+        end
       end
     end
   end

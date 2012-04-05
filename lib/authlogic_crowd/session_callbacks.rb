@@ -1,7 +1,7 @@
 module AuthlogicCrowd
   module SessionCallbacks
     METHODS = [
-      "before_sync", "sync", "after_sync"
+      "before_crowd_sync", "crowd_sync", "after_crowd_sync"
     ]
     def self.included(base)
       base.send :include, ActiveSupport::Callbacks
