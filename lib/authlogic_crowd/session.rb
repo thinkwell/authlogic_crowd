@@ -73,7 +73,7 @@ module AuthlogicCrowd
       private
 
       def authenticating_with_crowd?
-        has_crowd_user_token? || has_crowd_credentials?
+        klass.using_crowd? && (has_crowd_user_token? || has_crowd_credentials?)
       end
 
       # Use the Crowd to "log in" the user using the crowd.token_key

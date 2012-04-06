@@ -96,6 +96,14 @@ module AuthlogicCrowd
         end
         res
       end
+
+      def crowd_enabled?
+        !!self.crowd_enabled
+      end
+
+      def using_crowd?
+        self.crowd_enabled? && !(self.crowd_app_name.nil? || self.crowd_app_password.nil? || self.crowd_service_url.nil?)
+      end
     end
 
     module Methods
@@ -175,7 +183,7 @@ module AuthlogicCrowd
       #end
 
       def using_crowd?
-        self.class.crowd_enabled && !(self.class.crowd_app_name.nil? || self.class.crowd_app_password.nil? || self.class.crowd_service_url.nil?)
+        self.class.using_crowd?
       end
 
       #def validate_password_with_crowd?
