@@ -9,8 +9,10 @@ module AuthlogicCrowd
 
         persist :persist_by_crowd, :if => :authenticating_with_crowd?
         validate :validate_by_crowd, :if => [:authenticating_with_crowd?, :needs_crowd_validation?]
-        after_create :sync_with_crowd, :if => :authenticating_with_crowd?
         before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
+        after_create(:if => :authenticating_with_crowd?, :unless => :new_registration?) do |s|
+          s.crowd_synchronizer.sync_from_crowd(s.crowd_record, s.record)
+        end
       end
     end
 
@@ -70,6 +72,10 @@ module AuthlogicCrowd
         klass.crowd_client_with_app_token(crowd_client, &block)
       end
 
+      def crowd_synchronizer
+        @crowd_synchronizer ||= klass.crowd_synchronizer(crowd_client)
+      end
+
       private
 
       def authenticating_with_crowd?
@@ -91,7 +97,7 @@ module AuthlogicCrowd
       def persist_by_crowd
         clear_crowd_auth_cache
         return false unless has_crowd_user_token? && valid_crowd_user_token? && crowd_username
-        self.unauthorized_record = find_or_create_record_by_crowd
+        self.unauthorized_record = find_or_create_record_from_crowd
         valid?
       rescue SimpleCrowd::CrowdError => e
         Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
@@ -116,7 +122,7 @@ module AuthlogicCrowd
           errors.instance_variable_get('@errors').delete(password_field.to_s)
 
           if valid_crowd_credentials?
-            self.attempted_record = find_or_create_record_by_crowd
+            self.attempted_record = find_or_create_record_from_crowd
             unless self.attempted_record
               errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid"))
             end
@@ -283,34 +289,16 @@ module AuthlogicCrowd
         res
       end
 
-      def find_or_create_record_by_crowd
+      def find_or_create_record_from_crowd
         return nil unless crowd_username
         record = search_for_record(find_by_login_method, crowd_username)
 
         if !record && auto_register?
-          record = klass.new :login => crowd_username, :email => crowd_record.email
-          self.new_registration = true
-          old_record = self.record
-          self.record = record
-          crowd_sync
-          self.record = old_record
-          #save_record(record)
+          record = crowd_synchronizer.create_record_from_crowd(crowd_record)
+          self.new_registration if record
         end
 
         record
-      end
-
-      def sync_with_crowd
-        # If it's a new registration then the crowd data was just pulled, so skip syncing on login
-        return if new_registration?
-
-        return unless self.attempted_record
-
-        if crowd_record && before_crowd_sync
-          crowd_sync
-          #save_record
-          after_crowd_sync
-        end
       end
 
       # Logout of crowd and remove the crowd cookie.

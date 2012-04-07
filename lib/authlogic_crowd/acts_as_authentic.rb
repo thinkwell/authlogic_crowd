@@ -5,7 +5,7 @@ module AuthlogicCrowd
     def self.included(klass)
       klass.class_eval do
         extend Config
-        extend ClassMethods
+        add_acts_as_authentic_module(ActsAsAuthenticCallbacks)
         add_acts_as_authentic_module(Methods)
       end
     end
@@ -38,10 +38,10 @@ module AuthlogicCrowd
       end
       alias_method :crowd_app_password=, :crowd_app_password
 
-      def crowd_user_token_field(value = nil)
-        rw_config(:crowd_user_token_field, value, :crowd_user_token)
+      def add_crowd_records(value=nil)
+        rw_config(:add_crowd_records, value, false)
       end
-      alias_method :crowd_user_token_field=, :crowd_user_token_field
+      alias_method :add_crowd_records=, :add_crowd_records
 
       def crowd_enabled(value=nil)
         rw_config(:crowd_enabled, value, true)
@@ -97,6 +97,10 @@ module AuthlogicCrowd
         res
       end
 
+      def crowd_synchronizer(crowd_client=self.crowd_client)
+        CrowdSynchronizer.new(self, crowd_client)
+      end
+
       def crowd_enabled?
         !!self.crowd_enabled
       end
@@ -109,86 +113,51 @@ module AuthlogicCrowd
     module Methods
       def self.included(klass)
         klass.class_eval do
-          #validate_on_create :must_have_unique_crowd_login, :if => :using_crowd?, :unless => :crowd_record
+          extend ClassMethods
 
-          # TODO: Cleanup and refactor into callbacks
-          #def create
-          #  if using_crowd? && !crowd_record
-          #    crowd_user = self.create_crowd_user
-          #    if crowd_user
-          #      # Crowd is going to store password so clear them from local object
-          #      self.clear_passwords
-          #      result = super
-          #      # Delete crowd user if local creation failed
-          #      crowd_client.delete_user crowd_user.user unless result
-          #      if result
-          #        user_token = crowd_client.create_user_token crowd_user.username
-          #        session_class.crowd_user_token = user_token unless
-          #            session_class.controller && session_class.controller.session[:"crowd.token_key"]
-          #      end
-          #      return result
-          #    end
-          #  end
-          #  super
-          #end
-          validates_length_of_password_field_options validates_length_of_password_field_options.merge(:on => :create)
-          validates_confirmation_of_password_field_options validates_confirmation_of_password_field_options.merge(:on => :create)
-          validates_length_of_password_confirmation_field_options validates_length_of_password_confirmation_field_options.merge(:on => :create)
+          after_create(:if => [:using_crowd?, :adding_crowd_records?]) do |r|
+            r.crowd_synchronizer.create_crowd_record unless r.crowd_record
+          end
+
+          validate_on_create :must_have_unique_crowd_login, :if => [:using_crowd?, :adding_crowd_records?], :unless => :crowd_record
         end
       end
 
-      #attr_accessor :crowd_record
+      attr_accessor :crowd_record, :crowd_synchronizer
 
       def crowd_client
         @crowd_client ||= self.class.crowd_client
       end
 
-      protected
+      def crowd_client_with_app_token(&block)
+        self.class.crowd_client_with_app_token(crowd_client, &block)
+      end
 
-      #def create_crowd_user
-      #  return unless self.login && @password
-      #  self.crowd_record = SimpleCrowd::User.new({:username => self.login})
-      #  sync_on_create
-      #  crowd_client.add_user self.crowd_record, @password
-      #end
+      def crowd_synchronizer
+        @crowd_synchronizer ||= self.class.crowd_synchronizer(crowd_client)
+      end
 
-      #def clear_passwords
-      #  @password = nil
-      #  @password_changed = false
-      #  send("#{self.class.crypted_password_field}=", nil) if self.class.crypted_password_field
-      #  send("#{self.class.password_salt_field}=", nil) if self.class.password_salt_field
-      #end
+      def crowd_password
+        password
+      end
 
       private
 
-      #def must_have_unique_crowd_login
-      #  login = send(self.class.login_field)
-      #  crowd_user = crowd_client.find_user_by_name(login)
-      #  errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).nil?
-      #end
-
-
-      #def load_crowd_app_token
-      #  cached_token = Rails.cache.read('crowd_app_token')
-      #  crowd_client.app_token = cached_token unless cached_token.nil?
-      #  Rails.cache.write('crowd_app_token', crowd_client.app_token) unless cached_token == crowd_client.app_token
-      #end
-      #def crowd_cookie_info
-      #  unless @crowd_cookie_info
-      #    cached_info = Rails.cache.read('crowd_cookie_info')
-      #    @crowd_cookie_info ||= cached_info || crowd_client.get_cookie_info
-      #    Rails.cache.write('crowd_cookie_info', @crowd_cookie_info) unless cached_info == @crowd_cookie_info
-      #  end
-      #  @crowd_cookie_info
-      #end
+      def must_have_unique_crowd_login
+        login = send(self.class.login_field)
+        crowd_user = crowd_client_with_app_token do |crowd_client|
+          crowd_client.find_user_by_name(login)
+        end
+        errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).nil?
+      end
 
       def using_crowd?
         self.class.using_crowd?
       end
 
-      #def validate_password_with_crowd?
-      #  #!using_crowd? && require_password?
-      #end
+      def adding_crowd_records?
+        self.class.after_create_add_crowd_record
+      end
     end
   end
 end
