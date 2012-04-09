@@ -11,7 +11,10 @@ module AuthlogicCrowd
         validate :validate_by_crowd, :if => [:authenticating_with_crowd?, :needs_crowd_validation?]
         before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
         after_create(:if => :authenticating_with_crowd?, :unless => :new_registration?) do |s|
-          s.crowd_synchronizer.sync_from_crowd(s.crowd_record, s.record)
+          synchronizer = s.crowd_synchronizer
+          synchronizer.local_record = s.record
+          synchronizer.crowd_record = s.crowd_record
+          synchronizer.sync_from_crowd
         end
       end
     end
@@ -296,7 +299,9 @@ module AuthlogicCrowd
         record = search_for_record(find_by_login_method, crowd_username)
 
         if !record && auto_register?
-          record = crowd_synchronizer.create_record_from_crowd(crowd_record)
+          synchronizer = crowd_synchronizer
+          syncrhonizer.crowd_record = crowd_record
+          record = synchronizer.create_record_from_crowd
           self.new_registration if record
         end
 

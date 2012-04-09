@@ -45,6 +45,13 @@ module AuthlogicCrowd
       end
       alias_method :add_crowd_records=, :add_crowd_records
 
+      # Should changes to local records be synced to crowd?
+      # Default is true
+      def update_crowd_records(value=nil)
+        rw_config(:update_crowd_records, value, true)
+      end
+      alias_method :update_crowd_records=, :update_crowd_records
+
       def crowd_enabled(value=nil)
         rw_config(:crowd_enabled, value, true)
       end
@@ -99,8 +106,8 @@ module AuthlogicCrowd
         res
       end
 
-      def crowd_synchronizer(crowd_client=self.crowd_client)
-        CrowdSynchronizer.new(self, crowd_client)
+      def crowd_synchronizer(crowd_client=self.crowd_client, local_record=nil)
+        CrowdSynchronizer.new(self, crowd_client, local_record)
       end
 
       def crowd_enabled?
@@ -117,11 +124,15 @@ module AuthlogicCrowd
         klass.class_eval do
           extend ClassMethods
 
-          after_create(:if => [:using_crowd?, :adding_crowd_records?]) do |r|
-            r.crowd_synchronizer.create_crowd_record unless r.crowd_record
+          after_create(:if => [:using_crowd?, :adding_crowd_records?], :unless => :has_crowd_record?) do |r|
+            r.crowd_synchronizer.create_crowd_record
           end
 
-          validate_on_create :must_have_unique_crowd_login, :if => [:using_crowd?, :adding_crowd_records?], :unless => :crowd_record
+          after_update(:if => [:using_crowd?, :updating_crowd_records?, :has_crowd_record?]) do |r|
+            r.crowd_synchronizer.sync_to_crowd
+          end
+
+          validate_on_create :must_have_unique_crowd_login, :if => [:using_crowd?, :adding_crowd_records?], :unless => :has_crowd_record?
         end
       end
 
@@ -136,11 +147,44 @@ module AuthlogicCrowd
       end
 
       def crowd_synchronizer
-        @crowd_synchronizer ||= self.class.crowd_synchronizer(crowd_client)
+        @crowd_synchronizer ||= self.class.crowd_synchronizer(crowd_client, self)
+      end
+
+      def crowd_record
+        return nil unless using_crowd?
+        if @crowd_record.nil?
+          @crowd_record = false
+          begin
+            login = self.send(self.class.login_field)
+            record = crowd_client_with_app_token do |crowd_client|
+              crowd_client.find_user_by_name(login)
+            end
+            @crowd_record = record if record
+          rescue SimpleCrowd::CrowdError => e
+            Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
+          end
+        end
+        @crowd_record == false ? nil : @crowd_record
       end
 
       def crowd_password
         password
+      end
+
+      def using_crowd?
+        self.class.using_crowd?
+      end
+
+      def adding_crowd_records?
+        self.class.add_crowd_records
+      end
+
+      def updating_crowd_records?
+        self.class.update_crowd_records
+      end
+
+      def has_crowd_record?
+        !!self.crowd_record
       end
 
       private
@@ -151,14 +195,6 @@ module AuthlogicCrowd
           crowd_client.find_user_by_name(login)
         end
         errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).nil?
-      end
-
-      def using_crowd?
-        self.class.using_crowd?
-      end
-
-      def adding_crowd_records?
-        self.class.after_create_add_crowd_record
       end
     end
   end

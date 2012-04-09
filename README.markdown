@@ -55,9 +55,9 @@ re-authenticate periodically using *crowd_auth_every*:
 
 ### Auto Registration
 
-When authlogic_crowd encounters a valid Crowd user with no corresponding local
-user, a new local user will be added by default.  You can disable
-auto-registration in your Authlogic session model:
+When a Crowd user logs in with no corresponding local user, a new local user
+will be added by default.  You can disable auto-registration with the
+`auto_register` setting in your Authlogic session:
 
     class UserSession < Authlogic::Session::Base
       auto_register false
@@ -67,11 +67,25 @@ auto-registration in your Authlogic session model:
 ### Auto Add Crowd Records
 
 When a new local user is added, authlogic_crowd can add a corresponding user to
-Crowd.  This is disabled by default.  To enable, configure your model:
+Crowd.  This is disabled by default.  To enable, use the `add_crowd_records`
+setting:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
         c.add_crowd_records = true
+      end
+    end
+
+
+### Auto Update Crowd Records
+
+When a local user is updated, authlogic_crowd will update the corresponding
+Crowd user.  This is enabled by default.  To disable, use the
+`update_crowd_records` setting:
+
+    class User < ActiveRecord::Base
+      acts_as_authentic do |c|
+        c.update_crowd_records = false
       end
     end
 
@@ -105,6 +119,7 @@ plugin.  Callbacks execute in the following order:
   after_sync_to_crowd  
   after_create_crowd_record  
 
+
 ### before_sync_from_crowd, sync_from_crowd, after_sync_from_crowd
 
 Called whenever a local record should be synchronized from Crowd.  Each time a
@@ -115,7 +130,6 @@ For example:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        ...
         c.sync_from_crowd :update_from_crowd_record
       end
 
@@ -125,15 +139,33 @@ For example:
       end
     end
 
+
 ### before_sync_to_crowd, sync_to_crowd, after_sync_to_crowd
 
 Called whenever Crowd should be synchornized from a local record.
+
+For example:
+
+    class User < ActiveRecord::Base
+      acts_as_authentic do |c|
+        c.sync_to_crowd :update_crowd_record
+      end
+
+      def update_crowd_record
+        self.crowd_record = self.email
+        self.crowd_record.display_name = self.name
+        self.crowd_record.first_name = self.first_name
+        self.crowd_record.last_name = self.last_name
+      end
+    end
+
 
 ### before_create_from_crowd, after_create_from_crowd
 
 Called when creating a new local record from a crowd record.  When
 auto-registration is enabled new local users will be created automatically
 when existing Crowd users log in to your application.
+
 
 ### before_create_crowd_record, after_create_crowd_record
 
