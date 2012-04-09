@@ -38,6 +38,8 @@ module AuthlogicCrowd
       end
       alias_method :crowd_app_password=, :crowd_app_password
 
+      # Should new local records be added to crowd?
+      # Default is false.
       def add_crowd_records(value=nil)
         rw_config(:add_crowd_records, value, false)
       end

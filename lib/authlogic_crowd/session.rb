@@ -25,7 +25,9 @@ module AuthlogicCrowd
       end
       alias_method :crowd_auth_every=, :crowd_auth_every
 
-      # Auto Register is enabled by default.
+      # Should a new local record be created for existing Crowd users with no
+      # matching local record?
+      # Default is true.
 	    # Add this in your Session object if you need to disable auto-registration via crowd
       def auto_register(value=true)
         auto_register_value(value)
