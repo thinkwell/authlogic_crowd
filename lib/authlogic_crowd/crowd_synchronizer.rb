@@ -46,12 +46,15 @@ module AuthlogicCrowd
         @syncing = true
         begin
           local_record.sync_to_crowd
-          if crowd_record.dirty?
+          if new_record || crowd_record.dirty? || local_record.crowd_password_changed?
             crowd_client_with_app_token do |crowd_client|
               if new_record
                 crowd_client.add_user crowd_record, local_record.crowd_password
               else
                 crowd_client.update_user crowd_record
+                if local_record.crowd_password_changed? && local_record.crowd_password
+                  crowd_client.update_user_credential crowd_record.username, local_record.crowd_password
+                end
               end
             end
           end

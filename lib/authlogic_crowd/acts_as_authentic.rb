@@ -128,6 +128,8 @@ module AuthlogicCrowd
             r.crowd_synchronizer.create_crowd_record
           end
 
+          before_update :crowd_before_update_reset_password, :if => [:using_crowd?, :updating_crowd_records?, :has_crowd_record?]
+
           after_update(:if => [:using_crowd?, :updating_crowd_records?, :has_crowd_record?]) do |r|
             r.crowd_synchronizer.sync_to_crowd
           end
@@ -167,10 +169,6 @@ module AuthlogicCrowd
         @crowd_record == false ? nil : @crowd_record
       end
 
-      def crowd_password
-        password
-      end
-
       def using_crowd?
         self.class.using_crowd?
       end
@@ -187,6 +185,29 @@ module AuthlogicCrowd
         !!self.crowd_record
       end
 
+      def crowd_password
+        password
+      end
+
+      def crowd_password_changed?
+        password_changed?
+      end
+
+      def valid_crowd_password?(plaintext_password)
+        if using_crowd?
+          begin
+            token = crowd_client_with_app_token do |crowd_client|
+              crowd_client.authenticate_user(self.unique_id, plaintext_password)
+            end
+            return true if token
+          rescue SimpleCrowd::CrowdError => e
+            Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
+          end
+        end
+        false
+      end
+
+
       private
 
       def must_have_unique_crowd_login
@@ -195,6 +216,13 @@ module AuthlogicCrowd
           crowd_client.find_user_by_name(login)
         end
         errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).nil?
+      end
+
+      def crowd_before_update_reset_password
+        if crowd_password_changed?
+          send("#{password_salt_field}=", nil) if password_salt_field
+          send("#{crypted_password_field}=", nil)
+        end
       end
     end
   end
