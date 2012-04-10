@@ -29,9 +29,9 @@ module AuthlogicCrowd
 
     def create_crowd_record
       if local_record.before_create_crowd_record
-        self.crowd_record = SimpleCrowd::User.new({:username => send(local_record.send(klass.login_field))})
+        self.crowd_record = SimpleCrowd::User.new({:username => local_record.send(klass.login_field)})
         if sync_to_crowd(true)
-          after_create_crowd_record
+          local_record.after_create_crowd_record
           return crowd_record
         end
       end
