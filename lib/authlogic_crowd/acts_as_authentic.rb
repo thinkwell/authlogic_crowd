@@ -64,46 +64,12 @@ module AuthlogicCrowd
           :service_url => crowd_service_url,
           :app_name => crowd_app_name,
           :app_password => crowd_app_password,
+          :cache_store => Rails.cache,
         }
       end
 
       def crowd_client
         SimpleCrowd::Client.new(crowd_config)
-      end
-
-      def crowd_app_token(crowd_client=self.crowd_client)
-        return crowd_client.app_token if crowd_client.app_token
-        Rails.cache.fetch('crowd_app_token') do
-          # Strings returned by crowd contain singleton methods which cannot
-          # be serialized into the Rails.cache.  Duping the strings removes the
-          # singleton methods.
-          crowd_client.app_token = crowd_client.authenticate_application
-          crowd_client.app_token.dup
-        end
-      end
-
-      def crowd_cookie_info(crowd_client=self.crowd_client)
-        Rails.cache.fetch('crowd_cookie_info') do
-          # Strings returned by crowd contain singleton methods which cannot
-          # be serialized into the Rails.cache.  Do a shallow dup of each string
-          # in the returned hash
-          crowd_client.get_cookie_info.inject({}) do |cookie_info, (key, val)|
-            cookie_info[key] = val ? val.dup : val
-            cookie_info
-          end
-        end
-      end
-
-      # Set the crowd_client.app_token and execute the given block.  After the block
-      # executes, cache the new app token if it changed.
-      def crowd_client_with_app_token(crowd_client=self.crowd_client, crowd_app_token=nil)
-        crowd_app_token = self.crowd_app_token(crowd_client) unless crowd_app_token
-        crowd_client.app_token = crowd_app_token
-        res = yield(crowd_client) if block_given?
-        if (new_app_token = crowd_client.app_token) != crowd_app_token
-          Rails.cache.write('crowd_app_token', new_app_token.dup)
-        end
-        res
       end
 
       def crowd_synchronizer(crowd_client=self.crowd_client, local_record=nil)
@@ -144,10 +110,6 @@ module AuthlogicCrowd
         @crowd_client ||= self.class.crowd_client
       end
 
-      def crowd_client_with_app_token(&block)
-        self.class.crowd_client_with_app_token(crowd_client, &block)
-      end
-
       def crowd_synchronizer
         @crowd_synchronizer ||= self.class.crowd_synchronizer(crowd_client, self)
       end
@@ -158,9 +120,7 @@ module AuthlogicCrowd
           @crowd_record = false
           begin
             login = self.send(self.class.login_field)
-            record = crowd_client_with_app_token do |crowd_client|
-              crowd_client.find_user_by_name(login)
-            end
+            record = crowd_client.find_user_by_name(login)
             @crowd_record = record if record
           rescue SimpleCrowd::CrowdError => e
             Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
@@ -196,9 +156,7 @@ module AuthlogicCrowd
       def valid_crowd_password?(plaintext_password)
         if using_crowd?
           begin
-            token = crowd_client_with_app_token do |crowd_client|
-              crowd_client.authenticate_user(self.unique_id, plaintext_password)
-            end
+            token = crowd_client.authenticate_user(self.unique_id, plaintext_password)
             return true if token
           rescue SimpleCrowd::CrowdError => e
             Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
@@ -212,9 +170,7 @@ module AuthlogicCrowd
 
       def must_have_unique_crowd_login
         login = send(self.class.login_field)
-        crowd_user = crowd_client_with_app_token do |crowd_client|
-          crowd_client.find_user_by_name(login)
-        end
+        crowd_user = crowd_client.find_user_by_name(login)
         errors.add(self.class.login_field, "is already taken") unless crowd_user.nil? || !errors.on(self.class.login_field).nil?
       end
 

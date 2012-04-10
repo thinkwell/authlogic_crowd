@@ -61,9 +61,7 @@ module AuthlogicCrowd
 
       def crowd_record
         if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:record)
-          crowd_client_with_app_token do |crowd_client|
-            @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
-          end
+          @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
         end
 
         @valid_crowd_user[:record]
@@ -71,10 +69,6 @@ module AuthlogicCrowd
 
       def crowd_client
         @crowd_client ||= klass.crowd_client
-      end
-
-      def crowd_client_with_app_token(&block)
-        klass.crowd_client_with_app_token(crowd_client, &block)
       end
 
       def crowd_synchronizer
@@ -172,10 +166,8 @@ module AuthlogicCrowd
           @valid_crowd_user[:user_token] = nil
           user_token = crowd_user_token
           if user_token
-            crowd_client_with_app_token do |crowd_client|
-              if crowd_client.is_valid_user_token?(user_token)
-                @valid_crowd_user[:user_token] = user_token
-              end
+            if crowd_client.is_valid_user_token?(user_token)
+              @valid_crowd_user[:user_token] = user_token
             end
           end
         end
@@ -192,26 +184,24 @@ module AuthlogicCrowd
         unless @valid_crowd_user.has_key?(:credentials)
           @valid_crowd_user[:user_token] = nil
 
-          crowd_client_with_app_token do |crowd_client|
-            # Authenticate using login/password
-            user_token = crowd_fetch {crowd_client.authenticate_user(login, password)}
-            if user_token
-              @valid_crowd_user[:user_token] = user_token
-              @valid_crowd_user[:username] = login
-            else
-              # See if the login exists
-              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_name(login)}
-              @valid_crowd_user[:username] = crecord ? crecord.username : nil
-            end
+          # Authenticate using login/password
+          user_token = crowd_fetch {crowd_client.authenticate_user(login, password)}
+          if user_token
+            @valid_crowd_user[:user_token] = user_token
+            @valid_crowd_user[:username] = login
+          else
+            # See if the login exists
+            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_name(login)}
+            @valid_crowd_user[:username] = crecord ? crecord.username : nil
+          end
 
-            # Attempt to find user with crowd email field instead of principal name
-            if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
-              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
-              if crecord
-                user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
-                @valid_crowd_user[:username] = crecord.username
-                @valid_crowd_user[:user_token] = user_token if user_token
-              end
+          # Attempt to find user with crowd email field instead of principal name
+          if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
+            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
+            if crecord
+              user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
+              @valid_crowd_user[:username] = crecord.username
+              @valid_crowd_user[:user_token] = user_token if user_token
             end
           end
 
@@ -321,9 +311,7 @@ module AuthlogicCrowd
           # Send an invalidate call for single signout
           # Apparently there is no way of knowing if this was successful or not.
           begin
-            crowd_client_with_app_token do |crowd_client|
-              crowd_client.invalidate_user_token(crowd_user_token) rescue nil
-            end
+            crowd_client.invalidate_user_token(crowd_user_token)
           rescue SimpleCrowd::CrowdError => e
             Rails.logger.debug "CROWD: logout_of_crowd #{e.message}"
           end
@@ -352,7 +340,7 @@ module AuthlogicCrowd
       end
 
       def crowd_cookie_info
-        @crowd_cookie_info ||= klass.crowd_cookie_info(crowd_client)
+        @crowd_cookie_info ||= crowd_client.get_cookie_info
       end
 
       # Executes the given block, returning nil if a SimpleCrowd::CrowdError
