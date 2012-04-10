@@ -84,7 +84,7 @@ module AuthlogicCrowd
       private
 
       def authenticating_with_crowd?
-        klass.using_crowd? && (has_crowd_user_token? || has_crowd_credentials?)
+        klass.using_crowd? && (authenticated_by_crowd? || has_crowd_user_token? || has_crowd_credentials?)
       end
 
       # Use the Crowd to "log in" the user using the crowd.token_key
@@ -140,6 +140,10 @@ module AuthlogicCrowd
           unless valid_crowd_user_token? && valid_crowd_username?
             errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
           end
+
+        elsif authenticated_by_crowd?
+          destroy
+          errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
         end
 
         unless self.attempted_record.valid?
@@ -276,17 +280,20 @@ module AuthlogicCrowd
       # crowd_auth_every seconds).
       def needs_crowd_validation?
         res = true
-        if !has_crowd_credentials? && has_crowd_user_token? && self.class.crowd_auth_every.to_i > 0
+        if !has_crowd_credentials? && authenticated_by_crowd? && self.class.crowd_auth_every.to_i > 0
           last_user_token = controller.session[:"crowd.last_user_token"]
           last_auth = controller.session[:"crowd.last_auth"]
           if last_user_token
-            if last_user_token != crowd_user_token
+            if !crowd_user_token
+              Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does not exist."
+            elsif last_user_token != crowd_user_token
               Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
             elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
               Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
               Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
             else
+              Rails.logger.debug "CROWD: Authenticating from cache.  Next authorization at #{last_auth + self.class.crowd_auth_every}."
               res = false
             end
           end
@@ -324,12 +331,16 @@ module AuthlogicCrowd
 
         controller.params.delete("crowd.token_key")
         destroy_crowd_cookie
-        clear_crowd_auth
+        clear_crowd_auth_cache
         true
       end
 
       def crowd_user_token
         controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"])
+      end
+
+      def authenticated_by_crowd?
+        !!controller.session[:"crowd.last_user_token"]
       end
 
       def has_crowd_user_token?
