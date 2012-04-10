@@ -307,7 +307,7 @@ module AuthlogicCrowd
 
         if !record && auto_register?
           synchronizer = crowd_synchronizer
-          syncrhonizer.crowd_record = crowd_record
+          synchronizer.crowd_record = crowd_record
           record = synchronizer.create_record_from_crowd
           self.new_registration if record
         end
