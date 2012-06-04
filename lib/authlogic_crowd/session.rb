@@ -140,7 +140,7 @@ module AuthlogicCrowd
           errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
         end
 
-        unless self.attempted_record.valid?
+        unless self.attempted_record && self.attempted_record.valid?
           errors.add_to_base('record is not valid')
         end
 
