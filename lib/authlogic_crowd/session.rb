@@ -59,6 +59,10 @@ module AuthlogicCrowd
         self.class.auto_register_value
       end
 
+      def can_auto_register?(crowd_username)
+        auto_register?
+      end
+
       def crowd_record
         if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:record)
           @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
@@ -295,7 +299,7 @@ module AuthlogicCrowd
         return nil unless crowd_username
         record = search_for_record(find_by_login_method, crowd_username)
 
-        if !record && auto_register?
+        if !record && auto_register? && can_auto_register?(crowd_username)
           synchronizer = crowd_synchronizer
           synchronizer.crowd_record = crowd_record
           record = synchronizer.create_record_from_crowd
