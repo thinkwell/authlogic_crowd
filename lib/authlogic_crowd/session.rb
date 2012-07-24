@@ -297,7 +297,7 @@ module AuthlogicCrowd
 
       def find_or_create_record_from_crowd
         return nil unless crowd_username
-        record = search_for_record(find_by_login_method, crowd_username)
+        record = search_for_record_from_crowd(find_by_login_method, crowd_username)
 
         if !record && auto_register? && can_auto_register?(crowd_username)
           synchronizer = crowd_synchronizer
@@ -307,6 +307,10 @@ module AuthlogicCrowd
         end
 
         record
+      end
+
+      def search_for_record_from_crowd(find_by_login_method, crowd_username)
+        search_for_record(find_by_login_method, crowd_username)
       end
 
       # Logout of crowd and remove the crowd cookie.
