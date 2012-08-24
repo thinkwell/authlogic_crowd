@@ -10,6 +10,15 @@ module AuthlogicCrowd
         persist :persist_by_crowd, :if => :authenticating_with_crowd?
         validate :validate_by_crowd, :if => [:authenticating_with_crowd?, :needs_crowd_validation?]
         before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
+        before_persisting {|s| s.instance_variable_set('@persisted_by_crowd', false)}
+        after_persisting(:if => [:authenticating_with_crowd?, :persisted_by_crowd?, :explicit_login_from_crowd_token?], :unless => :new_registration?) do |s|
+          # The user was persisted via a crowd token (not an explicit login via username/password).
+          # Simulate explicit login by executing "save" callbacks.
+          s.before_save
+          s.new_session? ? s.before_create : s.before_update
+          s.new_session? ? s.after_create : s.after_update
+          s.after_save
+        end
         after_create(:if => :authenticating_with_crowd?, :unless => :new_registration?) do |s|
           synchronizer = s.crowd_synchronizer
           synchronizer.local_record = s.record
@@ -40,6 +49,16 @@ module AuthlogicCrowd
         rw_config(:auto_register,value,true)
       end
       alias_method :auto_register=, :auto_register
+
+      # Should login via a crowd token be treated as an explicit login?
+      # If true, explicit login callbacks ({before,after}_{create,update,save})
+      # will be triggered when a user is persisted.  If false, the user is
+      # persisted but explicit login callbacks do not fire.
+      # Default false
+      def explicit_login_from_crowd_token(value=nil)
+        rw_config(:explicit_login_from_crowd_token, value, false)
+      end
+      alias_method :explicit_login_from_crowd_token=, :explicit_login_from_crowd_token
     end
 
     module InstanceMethods
@@ -61,6 +80,10 @@ module AuthlogicCrowd
 
       def can_auto_register?(crowd_username)
         auto_register?
+      end
+
+      def explicit_login_from_crowd_token?
+        !!self.class.explicit_login_from_crowd_token
       end
 
       def crowd_record
@@ -101,7 +124,9 @@ module AuthlogicCrowd
         clear_crowd_auth_cache
         return false unless has_crowd_user_token? && valid_crowd_user_token? && crowd_username
         self.unauthorized_record = find_or_create_record_from_crowd
-        valid?
+        return false unless valid?
+        @persisted_by_crowd = true
+        true
       rescue SimpleCrowd::CrowdError => e
         Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
         return false
@@ -337,6 +362,10 @@ module AuthlogicCrowd
 
       def authenticated_by_crowd?
         !!controller.session[:"crowd.last_user_token"]
+      end
+
+      def persisted_by_crowd?
+        !!@persisted_by_crowd
       end
 
       def has_crowd_user_token?
