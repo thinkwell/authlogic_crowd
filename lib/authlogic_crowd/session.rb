@@ -160,6 +160,9 @@ module AuthlogicCrowd
           end
 
         elsif has_crowd_user_token?
+          # Regenerate token using last_username
+          refresh_user_token if should_remember_user?
+          
           unless valid_crowd_user_token? && valid_crowd_username?
             errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
           end
@@ -308,7 +311,11 @@ module AuthlogicCrowd
             elsif last_user_token != crowd_user_token
               Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
             elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
-              Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
+              if should_remember_user?
+                Rails.logger.debug "CROWD: New crowd token required.  Last authorization was at #{last_auth} but remember_me was set to true."
+              else
+                Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
+              end
             elsif !last_auth
               Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
             else
@@ -378,6 +385,16 @@ module AuthlogicCrowd
 
       def crowd_cookie_info
         @crowd_cookie_info ||= crowd_client.get_cookie_info
+      end
+      
+      def should_remember_user?
+        controller && controller.cookies[:"pseudonym_credentials"].present?
+      end
+      
+      def refresh_user_token
+        user_login = controller.session[:"crowd.last_username"]
+        user_token = crowd_fetch {crowd_client.create_user_token(user_login)}
+        @valid_crowd_user[:user_token] = user_token
       end
 
       # Executes the given block, returning nil if a SimpleCrowd::CrowdError
