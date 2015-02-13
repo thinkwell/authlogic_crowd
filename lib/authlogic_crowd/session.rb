@@ -387,8 +387,11 @@ module AuthlogicCrowd
         @crowd_cookie_info ||= crowd_client.get_cookie_info
       end
       
+      # As Authlogic creates a cookie to know if the user wants to be remembered
+      # returns true only if the cookie exists.
+      # For cookie_key see Authlogic::Session::Cookies::Config
       def should_remember_user?
-        controller && controller.cookies[:"pseudonym_credentials"].present?
+        controller && controller.cookies[cookie_key].present?
       end
       
       def refresh_user_token
