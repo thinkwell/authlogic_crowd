@@ -161,7 +161,10 @@ module AuthlogicCrowd
 
         elsif has_crowd_user_token?
           # Regenerate token using last_username
-          refresh_user_token if should_remember_user?
+          if should_auto_refresh_user_token?
+            refresh_user_token
+            Rails.logger.debug "CROWD: Crowd user token refreshed."
+          end
           
           unless valid_crowd_user_token? && valid_crowd_username?
             errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
@@ -311,11 +314,7 @@ module AuthlogicCrowd
             elsif last_user_token != crowd_user_token
               Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
             elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
-              if should_remember_user?
-                Rails.logger.debug "CROWD: New crowd token required.  Last authorization was at #{last_auth} but remember_me was set to true."
-              else
-                Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
-              end
+              Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
               Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
             else
@@ -398,6 +397,15 @@ module AuthlogicCrowd
         user_login = controller.session[:"crowd.last_username"]
         user_token = crowd_fetch {crowd_client.create_user_token(user_login)}
         @valid_crowd_user[:user_token] = user_token
+      end
+      
+      def auto_refresh_user_token_for
+        should_remember_user? ? self.class.remember_me_for : 30.minutes
+      end
+      
+      def should_auto_refresh_user_token?
+        return false unless controller && controller.session[:last_request_at]
+        controller.session[:last_request_at] >= auto_refresh_user_token_for.ago
       end
 
       # Executes the given block, returning nil if a SimpleCrowd::CrowdError
