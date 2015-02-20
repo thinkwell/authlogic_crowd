@@ -59,6 +59,23 @@ module AuthlogicCrowd
         rw_config(:explicit_login_from_crowd_token, value, false)
       end
       alias_method :explicit_login_from_crowd_token=, :explicit_login_from_crowd_token
+      
+      # Time after last_request_at (in seconds) in which the user token should
+      # be refreshed without having to enter login credentials. Applies to users
+      # that did not use the remember_me checkbox.
+      # Default is 0 meaning no refreshing of user token
+      def session_timeout_default(value=nil)
+        rw_config(:session_timeout_default,value,0)
+      end
+      alias_method :session_timeout_default=, :session_timeout_default
+      
+      # Same as session_timeout_default but applies to users that used the
+      # remember_me option.
+      # Default is 0 meaning no refreshing of user token
+      def session_timeout_remember_me(value=nil)
+        rw_config(:session_timeout_remember_me,value,0)
+      end
+      alias_method :session_timeout_remember_me=, :session_timeout_remember_me
     end
 
     module InstanceMethods
@@ -400,12 +417,12 @@ module AuthlogicCrowd
       end
       
       def auto_refresh_user_token_for
-        should_remember_user? ? self.class.remember_me_for : 30.minutes
+        should_remember_user? ? self.class.session_timeout_remember_me : self.class.session_timeout_default
       end
       
       def should_auto_refresh_user_token?
         return false unless controller && controller.session[:last_request_at]
-        controller.session[:last_request_at] >= auto_refresh_user_token_for.ago
+        controller.session[:last_request_at] >= auto_refresh_user_token_for.ago || should_remember_user?
       end
 
       # Executes the given block, returning nil if a SimpleCrowd::CrowdError
