@@ -421,7 +421,8 @@ module AuthlogicCrowd
       end
       
       def should_auto_refresh_user_token?
-        return false unless controller && controller.session[:last_request_at]
+        last_user_token = controller.session[:"crowd.last_user_token"]
+        return false unless controller && controller.session[:last_request_at] && last_user_token == crowd_user_token
         controller.session[:last_request_at] >= auto_refresh_user_token_for.ago || should_remember_user?
       end
 
