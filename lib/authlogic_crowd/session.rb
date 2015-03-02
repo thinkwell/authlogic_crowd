@@ -404,10 +404,12 @@ module AuthlogicCrowd
       end
       
       # As Authlogic creates a cookie to know if the user wants to be remembered
-      # returns true only if the cookie exists.
+      # returns true only if the cookie exists and it belongs to the logged in user.
       # For cookie_key see Authlogic::Session::Cookies::Config
       def should_remember_user?
-        controller && controller.cookies[cookie_key].present?
+        return false unless controller && controller.cookies[cookie_key].present?
+        credentials_from_cookie = controller.cookies[cookie_key].split("::")[1]
+        credentials_from_cookie == controller.session[cookie_key]
       end
       
       def refresh_user_token
