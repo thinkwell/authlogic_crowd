@@ -59,7 +59,7 @@ module AuthlogicCrowd
         rw_config(:explicit_login_from_crowd_token, value, false)
       end
       alias_method :explicit_login_from_crowd_token=, :explicit_login_from_crowd_token
-      
+
       # Time after last_request_at (in seconds) in which the user token should
       # be refreshed without having to enter login credentials. Applies to users
       # that did not use the remember_me checkbox.
@@ -68,7 +68,7 @@ module AuthlogicCrowd
         rw_config(:session_timeout_default,value,0)
       end
       alias_method :session_timeout_default=, :session_timeout_default
-      
+
       # Same as session_timeout_default but applies to users that used the
       # remember_me option.
       # Default is 0 meaning no refreshing of user token
@@ -182,7 +182,7 @@ module AuthlogicCrowd
             refresh_user_token
             Rails.logger.debug "CROWD: Crowd user token refreshed."
           end
-          
+
           unless valid_crowd_user_token? && valid_crowd_username?
             errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
           end
@@ -243,7 +243,7 @@ module AuthlogicCrowd
             @valid_crowd_user[:username] = login
           else
             # See if the login exists
-            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_name(login)}
+            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(login)}
             @valid_crowd_user[:username] = crecord ? crecord.username : nil
           end
 
@@ -251,6 +251,7 @@ module AuthlogicCrowd
           if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
             crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
             if crecord
+              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(crecord.username)}
               user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
               @valid_crowd_user[:username] = crecord.username
               @valid_crowd_user[:user_token] = user_token if user_token
@@ -402,7 +403,7 @@ module AuthlogicCrowd
       def crowd_cookie_info
         @crowd_cookie_info ||= crowd_client.get_cookie_info
       end
-      
+
       # As Authlogic creates a cookie to know if the user wants to be remembered
       # returns true only if the cookie exists and it belongs to the logged in user.
       # For cookie_key see Authlogic::Session::Cookies::Config
@@ -411,17 +412,17 @@ module AuthlogicCrowd
         credentials_from_cookie = controller.cookies[cookie_key].split("::")[1]
         credentials_from_cookie == controller.session[cookie_key]
       end
-      
+
       def refresh_user_token
         user_login = controller.session[:"crowd.last_username"]
         user_token = crowd_fetch {crowd_client.create_user_token(user_login)}
         @valid_crowd_user[:user_token] = user_token
       end
-      
+
       def auto_refresh_user_token_for
         should_remember_user? ? self.class.session_timeout_remember_me : self.class.session_timeout_default
       end
-      
+
       def should_auto_refresh_user_token?
         last_user_token = controller.session[:"crowd.last_user_token"]
         return false unless controller && controller.session[:last_request_at] && last_user_token == crowd_user_token

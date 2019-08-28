@@ -120,7 +120,7 @@ module AuthlogicCrowd
           @crowd_record = false
           begin
             login = self.send(self.class.login_field)
-            record = crowd_client.find_user_by_name(login)
+            record = crowd_client.find_user_with_attributes_by_name(login)
             @crowd_record = record if record
           rescue SimpleCrowd::CrowdError => e
             Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
