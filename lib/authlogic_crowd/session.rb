@@ -106,6 +106,7 @@ module AuthlogicCrowd
       def crowd_record
         if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:record)
           @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
+          @valid_crowd_user[:record] = crowd_client.find_user_with_attributes_by_name(@valid_crowd_user[:record].username)
         end
 
         @valid_crowd_user[:record]
