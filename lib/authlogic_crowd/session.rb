@@ -7,40 +7,40 @@ module AuthlogicCrowd
 
         attr_accessor :new_registration
 
-        persist :persist_by_crowd, :if => :authenticating_with_crowd?
-        validate :validate_by_crowd, :if => [:authenticating_with_crowd?, :needs_crowd_validation?]
-        before_destroy :logout_of_crowd, :if => :authenticating_with_crowd?
-        before_persisting {|s| s.instance_variable_set('@persisted_by_crowd', false)}
-        after_persisting(:if => [:authenticating_with_crowd?, :persisted_by_crowd?, :explicit_login_from_crowd_token?], :unless => :new_registration?) do |s|
-          # The user was persisted via a crowd token (not an explicit login via username/password).
+        persist :persist_by_yolk, :if => :authenticating_with_yolk?
+        validate :validate_by_yolk, :if => [:authenticating_with_yolk?, :needs_yolk_validation?]
+        before_destroy :logout_of_yolk, :if => :authenticating_with_yolk?
+        before_persisting {|s| s.instance_variable_set('@persisted_by_yolk', false)}
+        after_persisting(:if => [:authenticating_with_yolk?, :persisted_by_yolk?, :explicit_login_from_yolk_token?], :unless => :new_registration?) do |s|
+          # The user was persisted via a yolk token (not an explicit login via username/password).
           # Simulate explicit login by executing "save" callbacks.
           s.before_save
           s.new_session? ? s.before_create : s.before_update
           s.new_session? ? s.after_create : s.after_update
           s.after_save
         end
-        after_create(:if => :authenticating_with_crowd?, :unless => :new_registration?) do |s|
-          synchronizer = s.crowd_synchronizer
+        after_create(:if => :authenticating_with_yolk?, :unless => :new_registration?) do |s|
+          synchronizer = s.yolk_synchronizer
           synchronizer.local_record = s.record
-          synchronizer.crowd_record = s.crowd_record
-          synchronizer.sync_from_crowd
+          synchronizer.yolk_record = s.yolk_record
+          synchronizer.sync_from_yolk
         end
       end
     end
 
-    # Configuration for the crowd feature.
+    # Configuration for the Yolk feature.
     module Config
 
-      # How often should Crowd re-authorize (in seconds).  Default is 0 (always re-authorize)
-      def crowd_auth_every(value = nil)
-        rw_config(:crowd_auth_every, value, 0)
+      # How often should Yolk re-authorize (in seconds).  Default is 0 (always re-authorize)
+      def yolk_auth_every(value = nil)
+        rw_config(:yolk_auth_every, value, 0)
       end
-      alias_method :crowd_auth_every=, :crowd_auth_every
+      alias_method :yolk_auth_every=, :yolk_auth_every
 
-      # Should a new local record be created for existing Crowd users with no
+      # Should a new local record be created for existing Yolk users with no
       # matching local record?
       # Default is true.
-	    # Add this in your Session object if you need to disable auto-registration via crowd
+	    # Add this in your Session object if you need to disable auto-registration via Yolk
       def auto_register(value=true)
         auto_register_value(value)
       end
@@ -50,15 +50,15 @@ module AuthlogicCrowd
       end
       alias_method :auto_register=, :auto_register
 
-      # Should login via a crowd token be treated as an explicit login?
+      # Should login via a yolk token be treated as an explicit login?
       # If true, explicit login callbacks ({before,after}_{create,update,save})
       # will be triggered when a user is persisted.  If false, the user is
       # persisted but explicit login callbacks do not fire.
       # Default false
-      def explicit_login_from_crowd_token(value=nil)
-        rw_config(:explicit_login_from_crowd_token, value, false)
+      def explicit_login_from_yolk_token(value=nil)
+        rw_config(:explicit_login_from_yolk_token, value, false)
       end
-      alias_method :explicit_login_from_crowd_token=, :explicit_login_from_crowd_token
+      alias_method :explicit_login_from_yolk_token=, :explicit_login_from_yolk_token
 
       # Time after last_request_at (in seconds) in which the user token should
       # be refreshed without having to enter login credentials. Applies to users
@@ -82,7 +82,7 @@ module AuthlogicCrowd
 
       def initialize(*args)
         super
-        @valid_crowd_user = {}
+        @valid_yolk_user = {}
       end
 
       # Determines if the authenticated user is also a new registration.
@@ -95,100 +95,100 @@ module AuthlogicCrowd
         self.class.auto_register_value
       end
 
-      def can_auto_register?(crowd_username)
+      def can_auto_register?(yolk_username)
         auto_register?
       end
 
-      def explicit_login_from_crowd_token?
-        !!self.class.explicit_login_from_crowd_token
+      def explicit_login_from_yolk_token?
+        !!self.class.explicit_login_from_yolk_token
       end
 
-      def crowd_record
-        if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:record)
-          @valid_crowd_user[:record] = crowd_client.find_user_by_token(@valid_crowd_user[:user_token])
-          @valid_crowd_user[:record] = crowd_client.find_user_with_attributes_by_name(@valid_crowd_user[:record].username)
+      def yolk_record
+        if @valid_yolk_user[:user_token] && !@valid_yolk_user.has_key?(:record)
+          @valid_yolk_user[:record] = yolk_client.get_user_by_token(@valid_yolk_user[:user_token])
+          @valid_yolk_user[:record] = yolk_client.get_user(@valid_yolk_user[:record].username)
         end
 
-        @valid_crowd_user[:record]
+        @valid_yolk_user[:record]
       end
 
-      def crowd_client
-        @crowd_client ||= klass.crowd_client
+      def yolk_client
+        @yolk_client ||= klass.yolk_client
       end
 
-      def crowd_synchronizer
-        @crowd_synchronizer ||= klass.crowd_synchronizer(crowd_client)
+      def yolk_synchronizer
+        @yolk_synchronizer ||= klass.yolk_synchronizer(yolk_client)
       end
 
       private
 
-      def authenticating_with_crowd?
-        klass.using_crowd? && (authenticated_by_crowd? || has_crowd_user_token? || has_crowd_credentials?)
+      def authenticating_with_yolk?
+        klass.using_yolk? && (authenticated_by_yolk? || has_yolk_user_token? || has_yolk_credentials?)
       end
 
-      # Use the Crowd to "log in" the user using the crowd.token_key
-      # cookie/parameter.  If the token_key is valid and returns a valid Crowd
+      # Use the Yolk to "log in" the user using the crowd.token_key
+      # cookie/parameter.  If the token_key is valid and returns a valid Yolk
       # user, the find_by_login_method is called to find the appropriate local
       # user/record.
       #
       # If no *local* record is found and auto_register is enabled (default)
       # then automatically create *local* record for them.
       #
-      # This method enables a Crowd user to log in without having to explicity
-      # log in to this app.  Once a Crowd user has authenticated with this app
+      # This method enables a Yolk user to log in without having to explicity
+      # log in to this app.  Once a Yolk user has authenticated with this app
       # via this method, future requests usually use the Authlogic::Session
       # module to persist/find users.
-      def persist_by_crowd
-        clear_crowd_auth_cache
-        return false unless has_crowd_user_token? && valid_crowd_user_token? && crowd_username
-        self.unauthorized_record = find_or_create_record_from_crowd
+      def persist_by_yolk
+        clear_yolk_auth_cache
+        return false unless has_yolk_user_token? && valid_yolk_user_token? && yolk_username
+        self.unauthorized_record = find_or_create_record_from_yolk
         return false unless valid?
-        @persisted_by_crowd = true
+        @persisted_by_yolk = true
         true
-      rescue SimpleCrowd::CrowdError => e
-        Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
+      rescue StandardError => e
+        Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
         return false
       end
 
-      # Validates the current record/user with Crowd.  This validates the
+      # Validates the current record/user with Yolk.  This validates the
       # crowd.token_key cookie/parameter and/or explicit credentials.
       #
       # If a crowd.token_key exists and matches a previously authenticated
-      # token_key, this method will only verify the token with crowd if the
-      # last authorization was more than crowd_auth_every seconds ago (see
-      # the crowd_auth_every config option).
-      def validate_by_crowd
+      # token_key, this method will only verify the token with yolk if the
+      # last authorization was more than yolk_auth_every seconds ago (see
+      # the yolk_auth_every config option).
+      def validate_by_yolk
         # Credentials trump a crowd.token_key.
         # We don't even attempt to authenticated from the token key if
         # credentials are present.
-        if has_crowd_credentials?
+        if has_yolk_credentials?
           # HACK: Remove previous login/password errors since we are going to
-          # try to validate them with crowd
+          # try to validate them with yolk
           errors.instance_variable_get('@errors').delete(login_field.to_s)
           errors.instance_variable_get('@errors').delete(password_field.to_s)
 
-          if valid_crowd_credentials?
-            self.attempted_record = find_or_create_record_from_crowd
+          if valid_yolk_credentials?
+            self.attempted_record = find_or_create_record_from_yolk
             unless self.attempted_record
               errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid"))
             end
           else
-            errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid")) if !@valid_crowd_user[:username]
-            errors.add(password_field, I18n.t('error_messages.password_invalid', :default => "is not valid")) if @valid_crowd_user[:username]
+            errors.add(login_field, I18n.t('error_messages.login_not_found', :default => "is not valid")) if !@valid_yolk_user[:username]
+            errors.add(password_field, I18n.t('error_messages.password_invalid', :default => "is not valid")) if @valid_yolk_user[:username]
           end
 
-        elsif has_crowd_user_token?
+        elsif has_yolk_user_token?
           # Regenerate token using last_username
           if should_auto_refresh_user_token?
             refresh_user_token
-            Rails.logger.debug "CROWD: Crowd user token refreshed."
+            Rails.logger.debug "YOLK: Yolk user token refreshed."
           end
 
-          unless valid_crowd_user_token? && valid_crowd_username?
+          unless valid_yolk_user_token? && valid_yolk_username?
             errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
           end
 
-        elsif authenticated_by_crowd?
+        elsif authenticated_by_yolk?
           destroy
           errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
         end
@@ -199,146 +199,133 @@ module AuthlogicCrowd
 
         if errors.count == 0
           # Set crowd.token_key cookie
-          save_crowd_cookie
+          save_yolk_cookie
 
-          # Cache crowd authorization to make future requests faster (if
-          # crowd_auth_every config is enabled)
-          cache_crowd_auth
+          # Cache yolk authorization to make future requests faster (if
+          # yolk_auth_every config is enabled)
+          cache_yolk_auth
         end
-      rescue SimpleCrowd::CrowdError => e
-        Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
-        errors.add_to_base("Crowd error: #{e}")
+      rescue StandardError => e
+        Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
+        errors.add_to_base("Yolk error: #{e}")
       end
 
       # Validate the crowd.token_key (if one exists)
-      # Uses simple_crowd to verify the user token on the configured crowd server.
-      # This only checks that the token is valid with Crowd.  It does not check
+      # This only checks that the token is valid with Yolk.  It does not check
       # that the token belongs to a valid local user/record.
-      def valid_crowd_user_token?
-        unless @valid_crowd_user.has_key?(:user_token)
-          @valid_crowd_user[:user_token] = nil
-          user_token = crowd_user_token
+      def valid_yolk_user_token?
+        unless @valid_yolk_user.has_key?(:user_token)
+          @valid_yolk_user[:user_token] = nil
+          user_token = yolk_user_token
           if user_token
-            if crowd_client.is_valid_user_token?(user_token)
-              @valid_crowd_user[:user_token] = user_token
+            if yolk_client.is_valid_user_token?(user_token)
+              @valid_yolk_user[:user_token] = user_token
             end
           end
         end
-        !!@valid_crowd_user[:user_token]
+        !!@valid_yolk_user[:user_token]
       end
 
-      # Validate username/password using Crowd.
-      # Uses simple_crowd to verify credentials on the configured crowd server.
-      def valid_crowd_credentials?
+      # Validate username/password using Yolk.
+      def valid_yolk_credentials?
         login = send(login_field)
         password = send("protected_#{password_field}")
         return false unless login && password
 
-        unless @valid_crowd_user.has_key?(:credentials)
-          @valid_crowd_user[:user_token] = nil
+        unless @valid_yolk_user.has_key?(:credentials)
+          @valid_yolk_user[:user_token] = nil
 
           # Authenticate using login/password
-          user_token = crowd_fetch {crowd_client.authenticate_user(login, password)}
-          if user_token
-            @valid_crowd_user[:user_token] = user_token
-            @valid_crowd_user[:username] = login
+          user = yolk_client.authenticate_user(login, password)
+          if user
+            @valid_yolk_user[:user_token] = user.token
+            @valid_yolk_user[:username] = login
           else
             # See if the login exists
-            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(login)}
-            @valid_crowd_user[:username] = crecord ? crecord.username : nil
+            crecord = @valid_yolk_user[:record] = yolk_client.get_user(login)
+            @valid_yolk_user[:username] = crecord ? crecord.username : nil
           end
 
-          # Attempt to find user with crowd email field instead of principal name
-          if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
-            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
-            if crecord
-              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(crecord.username)}
-              user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
-              @valid_crowd_user[:username] = crecord.username
-              @valid_crowd_user[:user_token] = user_token if user_token
-            end
-          end
-
-          @valid_crowd_user[:credentials] = !!@valid_crowd_user[:user_token]
+          @valid_yolk_user[:credentials] = !!@valid_yolk_user[:user_token]
         end
 
-        @valid_crowd_user[:credentials]
+        @valid_yolk_user[:credentials]
       end
 
-      # Validate the crowd username against the current record
-      def valid_crowd_username?
+      # Validate the yolk username against the current record
+      def valid_yolk_username?
         record_login = send(login_field) || (unauthorized_record && unauthorized_record.login)
 
-        # Use the last username if available to reduce crowd calls
-        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] == controller.session[:"crowd.last_user_token"]
-          crowd_login = controller.session[:"crowd.last_username"]
+        # Use the last username if available to reduce yolk calls
+        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] == controller.session[:"crowd.last_user_token"]
+          yolk_login = controller.session[:"crowd.last_username"]
         end
-        crowd_login = crowd_username unless crowd_login
+        yolk_login = yolk_username unless yolk_login
 
-        crowd_login && crowd_login == record_login
+        yolk_login && yolk_login == record_login
       end
 
-      def crowd_username
-        if @valid_crowd_user[:user_token] && !@valid_crowd_user.has_key?(:username)
-          crecord = crowd_record
-          @valid_crowd_user[:username] = crecord ? crecord.username : nil
+      def yolk_username
+        if @valid_yolk_user[:user_token] && !@valid_yolk_user.has_key?(:username)
+          crecord = yolk_record
+          @valid_yolk_user[:username] = crecord ? crecord.username : nil
         end
 
-        @valid_crowd_user[:username]
+        @valid_yolk_user[:username]
       end
 
-      def cache_crowd_auth
-        if @valid_crowd_user[:user_token]
+      def cache_yolk_auth
+        if @valid_yolk_user[:user_token]
           controller.session[:"crowd.last_auth"] = Time.now
-          controller.session[:"crowd.last_user_token"] = @valid_crowd_user[:user_token].dup
-          controller.session[:"crowd.last_username"] = @valid_crowd_user[:username].dup if @valid_crowd_user[:username]
-          Rails.logger.debug "CROWD: Cached crowd authorization (#{controller.session[:"crowd.last_username"]}).  Next authorization at #{Time.now + self.class.crowd_auth_every}." if self.class.crowd_auth_every.to_i > 0
+          controller.session[:"crowd.last_user_token"] = @valid_yolk_user[:user_token].dup
+          controller.session[:"crowd.last_username"] = @valid_yolk_user[:username].dup if @valid_yolk_user[:username]
+          Rails.logger.debug "YOLK: Cached yolk authorization (#{controller.session[:"crowd.last_username"]}).  Next authorization at #{Time.now + self.class.yolk_auth_every}." if self.class.yolk_auth_every.to_i > 0
         else
-          clear_crowd_auth_cache
+          clear_yolk_auth_cache
         end
       end
 
-      # Clear cached crowd information
-      def clear_crowd_auth_cache
+      # Clear cached yolk information
+      def clear_yolk_auth_cache
         controller.session.delete_if {|key, val| ["crowd.last_user_token", "crowd.last_auth", "crowd.last_username"].include?(key.to_s)}
       end
 
-      def save_crowd_cookie
-        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token
+      def save_yolk_cookie
+        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] != yolk_user_token
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
-            :domain => crowd_cookie_info[:domain],
+            :domain => klass.yolk_cookie_info[:domain],
             :secure => true,
             :SameSite => 'None',
-            :value => @valid_crowd_user[:user_token],
+            :value => @valid_yolk_user[:user_token],
           }
         end
       end
 
-      def destroy_crowd_cookie
-        controller.cookies.delete(:"crowd.token_key", :domain => crowd_cookie_info[:domain])
+      def destroy_yolk_cookie
+        controller.cookies.delete(:"crowd.token_key", :domain => klass.yolk_cookie_info[:domain])
       end
 
-      # When the crowd_auth_every config option is set and the user is logged
-      # in via crowd, validation can be skipped in certain cases (token_key
+      # When the yolk_auth_every config option is set and the user is logged
+      # in via yolk, validation can be skipped in certain cases (token_key
       # matches last token_key and last authorization was less than
-      # crowd_auth_every seconds).
-      def needs_crowd_validation?
+      # yolk_auth_every seconds).
+      def needs_yolk_validation?
         res = true
-        if !has_crowd_credentials? && authenticated_by_crowd? && self.class.crowd_auth_every.to_i > 0
+        if !has_yolk_credentials? && authenticated_by_yolk? && self.class.yolk_auth_every.to_i > 0
           last_user_token = controller.session[:"crowd.last_user_token"]
           last_auth = controller.session[:"crowd.last_auth"]
           if last_user_token
-            if !crowd_user_token
-              Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does not exist."
-            elsif last_user_token != crowd_user_token
-              Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
-            elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
-              Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
+            if !yolk_user_token
+              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does not exist."
+            elsif last_user_token != yolk_user_token
+              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does match cached token."
+            elsif last_auth && last_auth <= self.class.yolk_auth_every.ago
+              Rails.logger.debug "YOLK: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
-              Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
+              Rails.logger.debug "YOLK: Re-authorization required.  Unable to determine last authorization time."
             else
-              Rails.logger.debug "CROWD: Authenticating from cache.  Next authorization at #{last_auth + self.class.crowd_auth_every}."
+              Rails.logger.debug "YOLK: Authenticating from cache.  Next authorization at #{last_auth + self.class.yolk_auth_every}."
               res = false
             end
           end
@@ -346,64 +333,60 @@ module AuthlogicCrowd
         res
       end
 
-      def find_or_create_record_from_crowd
-        return nil unless crowd_username
-        record = search_for_record_from_crowd(find_by_login_method, crowd_username)
+      def find_or_create_record_from_yolk
+        return nil unless yolk_username
+        record = search_for_record_from_yolk(find_by_login_method, yolk_username)
 
-        if !record && auto_register? && can_auto_register?(crowd_username)
-          synchronizer = crowd_synchronizer
-          synchronizer.crowd_record = crowd_record
-          record = synchronizer.create_record_from_crowd
+        if !record && auto_register? && can_auto_register?(yolk_username)
+          synchronizer = yolk_synchronizer
+          synchronizer.yolk_record = yolk_record
+          record = synchronizer.create_record_from_yolk
           self.new_registration if record
         end
 
         record
       end
 
-      def search_for_record_from_crowd(find_by_login_method, crowd_username)
-        search_for_record(find_by_login_method, crowd_username)
+      def search_for_record_from_yolk(find_by_login_method, yolk_username)
+        search_for_record(find_by_login_method, yolk_username)
       end
 
-      # Logout of crowd and remove the crowd cookie.
-      def logout_of_crowd
-        if crowd_user_token
+      # Logout of yolk and remove the yolk cookie.
+      def logout_of_yolk
+        if yolk_user_token
           # Send an invalidate call for single signout
           # Apparently there is no way of knowing if this was successful or not.
           begin
-            crowd_client.invalidate_user_token(crowd_user_token)
-          rescue SimpleCrowd::CrowdError => e
-            Rails.logger.debug "CROWD: logout_of_crowd #{e.message}"
+            yolk_client.invalidate_user_token(yolk_user_token)
+          rescue StandardError => e
+            Rails.logger.debug "YOLK: logout_of_yolk #{e.message}"
           end
         end
 
         controller.params.delete("crowd.token_key")
-        destroy_crowd_cookie
-        clear_crowd_auth_cache
+        destroy_yolk_cookie
+        clear_yolk_auth_cache
         true
       end
 
-      def crowd_user_token
+      def yolk_user_token
         controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"])
       end
 
-      def authenticated_by_crowd?
+      def authenticated_by_yolk?
         !!controller.session[:"crowd.last_user_token"]
       end
 
-      def persisted_by_crowd?
-        !!@persisted_by_crowd
+      def persisted_by_yolk?
+        !!@persisted_by_yolk
       end
 
-      def has_crowd_user_token?
-        !!crowd_user_token
+      def has_yolk_user_token?
+        !!yolk_user_token
       end
 
-      def has_crowd_credentials?
+      def has_yolk_credentials?
         login_field && password_field && (!send(login_field).nil? || !send("protected_#{password_field}").nil?)
-      end
-
-      def crowd_cookie_info
-        @crowd_cookie_info ||= crowd_client.get_cookie_info
       end
 
       # As Authlogic creates a cookie to know if the user wants to be remembered
@@ -417,8 +400,8 @@ module AuthlogicCrowd
 
       def refresh_user_token
         user_login = controller.session[:"crowd.last_username"]
-        user_token = crowd_fetch {crowd_client.create_user_token(user_login)}
-        @valid_crowd_user[:user_token] = user_token
+        user_token = yolk_client.create_user_token(user_login)
+        @valid_yolk_user[:user_token] = user_token
       end
 
       def auto_refresh_user_token_for
@@ -427,19 +410,8 @@ module AuthlogicCrowd
 
       def should_auto_refresh_user_token?
         last_user_token = controller.session[:"crowd.last_user_token"]
-        return false unless controller && controller.session[:last_request_at] && last_user_token == crowd_user_token
+        return false unless controller && controller.session[:last_request_at] && last_user_token == yolk_user_token
         controller.session[:last_request_at] >= auto_refresh_user_token_for.ago
-      end
-
-      # Executes the given block, returning nil if a SimpleCrowd::CrowdError
-      # ocurrs.
-      def crowd_fetch
-        begin
-          yield
-        rescue SimpleCrowd::CrowdError => e
-          Rails.logger.debug "CROWD[#{caller[0][/`.*'/][1..-2]}]: #{e.message}"
-          nil
-        end
       end
     end
   end

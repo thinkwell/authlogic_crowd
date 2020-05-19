@@ -46,10 +46,10 @@ should set internal password fields to `nil`.
 
 By default, authlogic_crowd authenticates the Crowd token key cookie on every
 request.  You can tell the module to cache authentication and only
-re-authenticate periodically using *crowd_auth_every*:
+re-authenticate periodically using *yolk_auth_every*:
 
     class UserSession < Authlogic::Session::Base
-      crowd_auth_every 10.minutes
+      yolk_auth_every 10.minutes
     end
 
 
@@ -67,12 +67,12 @@ will be added by default.  You can disable auto-registration with the
 ### Auto Add Crowd Records
 
 When a new local user is added, authlogic_crowd can add a corresponding user to
-Crowd.  This is disabled by default.  To enable, use the `add_crowd_records`
+Crowd.  This is disabled by default.  To enable, use the `add_yolk_records`
 setting:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        c.add_crowd_records = true
+        c.add_yolk_records = true
       end
     end
 
@@ -81,23 +81,23 @@ setting:
 
 When a local user is updated, authlogic_crowd will update the corresponding
 Crowd user.  This is enabled by default.  To disable, use the
-`update_crowd_records` setting:
+`update_yolk_records` setting:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        c.update_crowd_records = false
+        c.update_yolk_records = false
       end
     end
 
 
 ### Disable Crowd
 
-If you need to disable Crowd (in testing for example), use the `crowd_enabled`
+If you need to disable Crowd (in testing for example), use the `yolk_enabled`
 setting:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        c.crowd_enabled = false
+        c.yolk_enabled = false
       end
     end
 
@@ -107,20 +107,20 @@ setting:
 authlogic_crowd adds several callbacks that can be used to customize the
 plugin.  Callbacks execute in the following order:
 
-  before_create_from_crowd  
-  before_sync_from_crowd  
-  sync_from_crowd  
-  after_sync_from_crowd  
-  after_create_from_crowd  
+  before_create_from_yolk  
+  before_sync_from_yolk  
+  sync_from_yolk  
+  after_sync_from_yolk  
+  after_create_from_yolk  
 
-  before_create_crowd_record  
-  before_sync_to_crowd  
-  sync_to_crowd  
-  after_sync_to_crowd  
-  after_create_crowd_record  
+  before_create_yolk_record  
+  before_sync_to_yolk  
+  sync_to_yolk  
+  after_sync_to_yolk  
+  after_create_yolk_record  
 
 
-### before_sync_from_crowd, sync_from_crowd, after_sync_from_crowd
+### before_sync_from_yolk, sync_from_yolk, after_sync_from_yolk
 
 Called whenever a local record should be synchronized from Crowd.  Each time a
 user logs in to your application via Crowd (with login credentials or the
@@ -130,17 +130,17 @@ For example:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        c.sync_from_crowd :update_from_crowd_record
+        c.sync_from_yolk :update_from_yolk_record
       end
 
-      def update_from_crowd_record
-        self.email = self.crowd_record.email
-        self.name = self.crowd_record.first_name + ' ' + self.crowd_record.last_name
+      def update_from_yolk_record
+        self.email = self.yolk_record.email
+        self.name = self.yolk_record.first_name + ' ' + self.yolk_record.last_name
       end
     end
 
 
-### before_sync_to_crowd, sync_to_crowd, after_sync_to_crowd
+### before_sync_to_yolk, sync_to_yolk, after_sync_to_yolk
 
 Called whenever Crowd should be synchornized from a local record.
 
@@ -148,26 +148,26 @@ For example:
 
     class User < ActiveRecord::Base
       acts_as_authentic do |c|
-        c.sync_to_crowd :update_crowd_record
+        c.sync_to_yolk :update_yolk_record
       end
 
-      def update_crowd_record
-        self.crowd_record = self.email
-        self.crowd_record.display_name = self.name
-        self.crowd_record.first_name = self.first_name
-        self.crowd_record.last_name = self.last_name
+      def update_yolk_record
+        self.yolk_record = self.email
+        self.yolk_record.display_name = self.name
+        self.yolk_record.first_name = self.first_name
+        self.yolk_record.last_name = self.last_name
       end
     end
 
 
-### before_create_from_crowd, after_create_from_crowd
+### before_create_from_yolk, after_create_from_yolk
 
 Called when creating a new local record from a crowd record.  When
 auto-registration is enabled new local users will be created automatically
 when existing Crowd users log in to your application.
 
 
-### before_create_crowd_record, after_create_crowd_record
+### before_create_yolk_record, after_create_yolk_record
 
 Called when creating a new crowd record from a new local record.  These
-callbacks are only executed if the `add_crowd_records` setting is enabled.
+callbacks are only executed if the `add_yolk_records` setting is enabled.
