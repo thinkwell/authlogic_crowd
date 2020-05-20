@@ -130,6 +130,8 @@ module AuthlogicCrowd
           begin
             login = self.send(self.class.login_field)
             record = yolk_client.get_user(login)
+            Rails.logger.info "YOLK :: #{login} : got yolk record" if record
+            Rails.logger.info "YOLK :: #{login} : NO yolk record" unless record
             @yolk_record = record if record
           rescue StandardError => e
             Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
@@ -166,6 +168,8 @@ module AuthlogicCrowd
         if using_yolk?
           begin
             user = yolk_client.authenticate_user(self.unique_id, plaintext_password)
+            Rails.logger.info "YOLK :: #{self.unique_id} : authenticated user" if user
+            Rails.logger.info "YOLK :: #{self.unique_id} : NOT authenticated user" unless user
             return true if user
           rescue StandardError => e
             Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
@@ -180,6 +184,8 @@ module AuthlogicCrowd
       def must_have_unique_login
         login = send(self.class.login_field)
         yolk_user = yolk_client.get_user(login)
+        Rails.logger.info "YOLK :: #{login} : already exists" if yolk_user
+        Rails.logger.info "YOLK :: #{login} : is unique login" unless yolk_user
         errors.add(self.class.login_field, "is already taken") unless yolk_user.nil? || !errors.on(self.class.login_field).nil?
       end
 

@@ -106,7 +106,8 @@ module AuthlogicCrowd
       def yolk_record
         if @valid_yolk_user[:user_token] && !@valid_yolk_user.has_key?(:record)
           @valid_yolk_user[:record] = yolk_client.get_user_by_token(@valid_yolk_user[:user_token])
-          @valid_yolk_user[:record] = yolk_client.get_user(@valid_yolk_user[:record].username)
+          Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : got user by token : #{@valid_yolk_user[:record].username}" if @valid_yolk_user[:record]
+          Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : NO user by token" unless @valid_yolk_user[:record]
         end
 
         @valid_yolk_user[:record]
@@ -219,7 +220,10 @@ module AuthlogicCrowd
           user_token = yolk_user_token
           if user_token
             if yolk_client.is_valid_user_token?(user_token)
+              Rails.logger.info "YOLK :: #{user_token} : valid token"
               @valid_yolk_user[:user_token] = user_token
+            else
+              Rails.logger.info "YOLK :: #{user_token} : NOT valid token"
             end
           end
         end
@@ -238,11 +242,15 @@ module AuthlogicCrowd
           # Authenticate using login/password
           user = yolk_client.authenticate_user(login, password)
           if user
+            Rails.logger.info "YOLK :: #{login} : authenticated"
             @valid_yolk_user[:user_token] = user.token
             @valid_yolk_user[:username] = login
           else
+            Rails.logger.info "YOLK :: #{login} : NOT authenticated"
             # See if the login exists
             crecord = @valid_yolk_user[:record] = yolk_client.get_user(login)
+            Rails.logger.info "YOLK :: #{login} : got user" if crecord
+            Rails.logger.info "YOLK :: #{login} : NO user" unless crecord
             @valid_yolk_user[:username] = crecord ? crecord.username : nil
           end
 
@@ -358,6 +366,7 @@ module AuthlogicCrowd
           # Apparently there is no way of knowing if this was successful or not.
           begin
             yolk_client.invalidate_user_token(yolk_user_token)
+            Rails.logger.info "YOLK :: #{yolk_user_token} : invalidated user token"
           rescue StandardError => e
             Rails.logger.debug "YOLK: logout_of_yolk #{e.message}"
           end
@@ -401,6 +410,7 @@ module AuthlogicCrowd
       def refresh_user_token
         user_login = controller.session[:"crowd.last_username"]
         user_token = yolk_client.create_user_token(user_login)
+        Rails.logger.info "YOLK :: #{user_login} : created user token : #{user_token}"
         @valid_yolk_user[:user_token] = user_token
       end
 

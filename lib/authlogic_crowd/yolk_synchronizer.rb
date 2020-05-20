@@ -51,7 +51,7 @@ module AuthlogicCrowd
           if new_record
             Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : add user : #{user_attributes.except(:password).inspect}"
             yolk_client.add_user user_attributes
-          else
+          elsif yolk_record.is_dirty?
             Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : update user : #{user_attributes.except(:password).inspect}"
             yolk_client.update_user yolk_record.username, user_attributes
           end
