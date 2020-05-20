@@ -46,15 +46,14 @@ module AuthlogicCrowd
         @syncing = true
         begin
           local_record.sync_to_yolk
-          if new_record || yolk_record.dirty? || local_record.yolk_password_changed?
-            if new_record
-              yolk_client.add_user yolk_record, local_record.yolk_password
-            else
-              yolk_client.update_user yolk_record
-              if local_record.yolk_password_changed? && local_record.yolk_password
-                yolk_client.update_user_credential yolk_record.username, local_record.yolk_password
-              end
-            end
+          user_attributes = yolk_record.to_h
+          user_attributes.merge!({:password => local_record.yolk_password}) if local_record.yolk_password
+          if new_record
+            Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : add user : #{user_attributes.except(:password).inspect}"
+            yolk_client.add_user user_attributes
+          else
+            Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : update user : #{user_attributes.except(:password).inspect}"
+            yolk_client.update_user yolk_record.username, user_attributes
           end
         ensure
           @syncing = false
