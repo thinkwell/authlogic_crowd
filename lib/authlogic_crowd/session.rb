@@ -242,7 +242,9 @@ module AuthlogicCrowd
           # Authenticate using login/password
           user = yolk_client.authenticate_user(login, password)
           if user
-            Rails.logger.info "YOLK :: #{login} : authenticated"
+            Rails.logger.info "YOLK :: #{login} : authenticated : #{user.inspect}" if user.token
+            Rails.logger.error "YOLK :: #{login} : authenticated BUT NO TOKEN: #{user.inspect}" unless user.token
+            @valid_yolk_user[:record] = user
             @valid_yolk_user[:user_token] = user.token
             @valid_yolk_user[:username] = login
           else
