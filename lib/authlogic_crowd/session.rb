@@ -334,15 +334,15 @@ module AuthlogicCrowd
           last_auth = controller.session[:"crowd.last_auth"]
           if last_user_token
             if !yolk_user_token
-              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does not exist."
+              Rails.logger.info "YOLK: Re-authorization required.  Yolk token does not exist."
             elsif last_user_token != yolk_user_token
-              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does match cached token."
+              Rails.logger.info "YOLK: Re-authorization required.  Yolk token does match cached token."
             elsif last_auth && last_auth <= self.class.yolk_auth_every.ago
-              Rails.logger.debug "YOLK: Re-authorization required.  Last authorization was at #{last_auth}."
+              Rails.logger.info "YOLK: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
-              Rails.logger.debug "YOLK: Re-authorization required.  Unable to determine last authorization time."
+              Rails.logger.info "YOLK: Re-authorization required.  Unable to determine last authorization time."
             else
-              Rails.logger.debug "YOLK: Authenticating from cache.  Next authorization at #{last_auth + self.class.yolk_auth_every}."
+              Rails.logger.info "YOLK: Authenticating from cache.  Next authorization at #{last_auth + self.class.yolk_auth_every}."
               res = false
             end
           end
@@ -418,9 +418,13 @@ module AuthlogicCrowd
 
       def refresh_user_token
         user_login = controller.session[:"crowd.last_username"]
-        user_token = yolk_client.create_user_token(user_login)
-        Rails.logger.info "YOLK :: #{user_login} : created user token : #{user_token}"
-        @valid_yolk_user[:user_token] = user_token
+        begin
+          user_token = yolk_client.create_user_token(user_login)
+          Rails.logger.info "YOLK :: #{user_login} : created user token : #{user_token}"
+          @valid_yolk_user[:user_token] = user_token
+        rescue StandardError => error
+          Rails.logger.error "YOLK :: #{user_login} : could not create user token : #{error.message}"
+        end
       end
 
       def auto_refresh_user_token_for
