@@ -49,11 +49,19 @@ module AuthlogicCrowd
           user_attributes = yolk_record.to_h
           user_attributes.merge!({:password => local_record.yolk_password}) if local_record.yolk_password
           if new_record
-            Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : add user : #{user_attributes.except(:password).inspect}"
-            yolk_client.add_user user_attributes
+            begin
+              yolk_client.add_user user_attributes
+              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : added user : #{user_attributes.except(:password).inspect}"
+            rescue StandardError => error
+              Rails.logger.error "YOLK_SYNC :: #{yolk_record.username} : could not add user : #{error.message}"
+            end
           elsif yolk_record.is_dirty?
-            Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : update user : #{user_attributes.except(:password).inspect}"
-            yolk_client.update_user yolk_record.username, user_attributes
+            begin
+              yolk_client.update_user yolk_record.username, user_attributes
+              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : updated user : #{user_attributes.except(:password).inspect}"
+            rescue StandardError => error
+              Rails.logger.error "YOLK_SYNC :: #{yolk_record.username} : could not update user : #{error.message}"
+            end
           end
         ensure
           @syncing = false

@@ -43,6 +43,11 @@ module AuthlogicCrowd
       end
       alias_method :yolk_cookie_domain=, :yolk_cookie_domain
 
+      def yolk_cookie_secure(secure=nil)
+        rw_config(:yolk_cookie_secure, secure, true)
+      end
+      alias_method :yolk_cookie_secure=, :yolk_cookie_secure
+
       # Should new local records be added to yolk?
       # Default is false.
       def add_yolk_records(value=nil)
@@ -74,7 +79,7 @@ module AuthlogicCrowd
       end
 
       def yolk_cookie_info
-        {:domain => yolk_cookie_domain}
+        {:domain => yolk_cookie_domain, :secure => yolk_cookie_secure}
       end
 
       def yolk_client
@@ -129,12 +134,10 @@ module AuthlogicCrowd
           @yolk_record = false
           begin
             login = self.send(self.class.login_field)
-            record = yolk_client.get_user(login)
-            Rails.logger.info "YOLK :: #{login} : got yolk record" if record
-            Rails.logger.info "YOLK :: #{login} : NO yolk record" unless record
-            @yolk_record = record if record
+            @yolk_record = yolk_client.get_user(login)
+            Rails.logger.info "YOLK :: #{login} : got yolk record"
           rescue StandardError => e
-            Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
+            Rails.logger.info "YOLK :: #{login} : NO yolk record : #{e.message}"
           end
         end
         @yolk_record == false ? nil : @yolk_record
@@ -183,10 +186,13 @@ module AuthlogicCrowd
 
       def must_have_unique_login
         login = send(self.class.login_field)
-        yolk_user = yolk_client.get_user(login)
-        Rails.logger.info "YOLK :: #{login} : already exists" if yolk_user
-        Rails.logger.info "YOLK :: #{login} : is unique login" unless yolk_user
-        errors.add(self.class.login_field, "is already taken") unless yolk_user.nil? || !errors.on(self.class.login_field).nil?
+        begin
+          yolk_user = yolk_client.get_user(login)
+          Rails.logger.info "YOLK :: #{login} : already exists"
+          errors.add(self.class.login_field, "is already taken") unless yolk_user.nil? || !errors.on(self.class.login_field).nil?
+        rescue StandardError => error
+          Rails.logger.info "YOLK :: #{login} : is unique login"
+        end
       end
 
       def yolk_before_update_reset_password

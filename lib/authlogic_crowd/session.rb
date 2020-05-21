@@ -105,9 +105,12 @@ module AuthlogicCrowd
 
       def yolk_record
         if @valid_yolk_user[:user_token] && !@valid_yolk_user.has_key?(:record)
-          @valid_yolk_user[:record] = yolk_client.get_user_by_token(@valid_yolk_user[:user_token])
-          Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : got user by token : #{@valid_yolk_user[:record].username}" if @valid_yolk_user[:record]
-          Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : NO user by token" unless @valid_yolk_user[:record]
+          begin
+            @valid_yolk_user[:record] = yolk_client.get_user_by_token(@valid_yolk_user[:user_token])
+            Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : got user by token : #{@valid_yolk_user[:record].username}"
+          rescue StandardError => error
+            Rails.logger.info "YOLK :: #{@valid_yolk_user[:user_token]} : NO user by token : #{error.message}"
+          end
         end
 
         @valid_yolk_user[:record]
@@ -147,7 +150,7 @@ module AuthlogicCrowd
         @persisted_by_yolk = true
         true
       rescue StandardError => e
-        Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
         return false
       end
 
@@ -207,7 +210,7 @@ module AuthlogicCrowd
           cache_yolk_auth
         end
       rescue StandardError => e
-        Rails.logger.warn "YOLK[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
         errors.add_to_base("Yolk error: #{e}")
       end
 
@@ -250,10 +253,14 @@ module AuthlogicCrowd
           else
             Rails.logger.info "YOLK :: #{login} : NOT authenticated"
             # See if the login exists
-            crecord = @valid_yolk_user[:record] = yolk_client.get_user(login)
-            Rails.logger.info "YOLK :: #{login} : got user" if crecord
-            Rails.logger.info "YOLK :: #{login} : NO user" unless crecord
-            @valid_yolk_user[:username] = crecord ? crecord.username : nil
+            begin
+              crecord = @valid_yolk_user[:record] = yolk_client.get_user(login)
+              Rails.logger.info "YOLK :: #{login} : got user"
+              @valid_yolk_user[:username] = crecord.username
+            rescue StandardError => error
+              Rails.logger.info "YOLK :: #{login} : NO user : #{error.message}"
+              @valid_yolk_user[:username] = nil
+            end
           end
 
           @valid_yolk_user[:credentials] = !!@valid_yolk_user[:user_token]
@@ -305,7 +312,7 @@ module AuthlogicCrowd
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
             :domain => klass.yolk_cookie_info[:domain],
-            :secure => true,
+            :secure => klass.yolk_cookie_info[:secure],
             :SameSite => 'None',
             :value => @valid_yolk_user[:user_token],
           }
@@ -370,7 +377,7 @@ module AuthlogicCrowd
             yolk_client.invalidate_user_token(yolk_user_token)
             Rails.logger.info "YOLK :: #{yolk_user_token} : invalidated user token"
           rescue StandardError => e
-            Rails.logger.debug "YOLK: logout_of_yolk #{e.message}"
+            Rails.logger.error "YOLK::ERROR[#{__method__}]: #{e.message}"
           end
         end
 
