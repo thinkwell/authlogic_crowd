@@ -185,7 +185,6 @@ module AuthlogicCrowd
           # Regenerate token using last_username
           if should_auto_refresh_user_token?
             refresh_user_token
-            Rails.logger.debug "YOLK: Yolk user token refreshed."
           end
 
           unless valid_yolk_user_token? && valid_yolk_username?
