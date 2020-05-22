@@ -419,11 +419,11 @@ module AuthlogicCrowd
       def refresh_user_token
         user_login = controller.session[:"crowd.last_username"]
         begin
-          user_token = yolk_client.create_user_token(user_login)
-          Rails.logger.info "YOLK :: #{user_login} : created user token : #{user_token}"
+          user_token = yolk_client.get_user_token(user_login)
+          Rails.logger.info "YOLK :: #{user_login} : refreshed user token : #{user_token}"
           @valid_yolk_user[:user_token] = user_token
         rescue StandardError => error
-          Rails.logger.error "YOLK :: #{user_login} : could not create user token : #{error.message}"
+          Rails.logger.error "YOLK :: #{user_login} : could not refresh user token : #{error.message}"
         end
       end
 
