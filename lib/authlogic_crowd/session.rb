@@ -150,7 +150,8 @@ module AuthlogicCrowd
         @persisted_by_yolk = true
         true
       rescue StandardError => e
-        Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.error "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.error e.backtrace
         return false
       end
 
@@ -209,7 +210,8 @@ module AuthlogicCrowd
           cache_yolk_auth
         end
       rescue StandardError => e
-        Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.error "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.error e.backtrace
         errors.add_to_base("Yolk error: #{e}")
       end
 
@@ -377,6 +379,7 @@ module AuthlogicCrowd
             Rails.logger.info "YOLK :: #{yolk_user_token} : invalidated user token"
           rescue StandardError => e
             Rails.logger.error "YOLK::ERROR[#{__method__}]: #{e.message}"
+            Rails.logger.error e.backtrace            
           end
         end
 
