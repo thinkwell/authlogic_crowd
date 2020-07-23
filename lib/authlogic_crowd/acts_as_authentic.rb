@@ -100,7 +100,7 @@ module AuthlogicCrowd
             r.crowd_synchronizer.sync_to_crowd
           end
 
-          validate_on_create :must_have_unique_crowd_login, :if => [:using_crowd?, :adding_crowd_records?], :unless => :has_crowd_record?
+          validate :must_have_unique_crowd_login, :on => :create, :if => [:using_crowd?, :adding_crowd_records?], :unless => :has_crowd_record?
         end
       end
 
