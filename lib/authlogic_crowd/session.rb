@@ -335,7 +335,7 @@ module AuthlogicCrowd
               Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does not exist."
             elsif last_user_token != crowd_user_token
               Rails.logger.debug "CROWD: Re-authorization required.  Crowd token does match cached token."
-            elsif last_auth && last_auth <= self.class.crowd_auth_every.ago
+            elsif last_auth && last_auth <= self.class.crowd_auth_every.seconds.ago
               Rails.logger.debug "CROWD: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
               Rails.logger.debug "CROWD: Re-authorization required.  Unable to determine last authorization time."
@@ -430,7 +430,7 @@ module AuthlogicCrowd
       def should_auto_refresh_user_token?
         last_user_token = controller.session[:"crowd.last_user_token"]
         return false unless controller && controller.session[:last_request_at] && last_user_token == crowd_user_token
-        controller.session[:last_request_at] >= auto_refresh_user_token_for.ago
+        controller.session[:last_request_at] >= auto_refresh_user_token_for.seconds.ago
       end
 
       # Executes the given block, returning nil if a SimpleCrowd::CrowdError
