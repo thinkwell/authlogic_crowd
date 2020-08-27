@@ -300,7 +300,9 @@ module AuthlogicCrowd
 
       # Clear cached crowd information
       def clear_crowd_auth_cache
-        controller.session.delete_if {|key, val| ["crowd.last_user_token", "crowd.last_auth", "crowd.last_username"].include?(key.to_s)}
+        controller.session.delete("crowd.last_user_token")
+        controller.session.delete("crowd.last_auth")
+        controller.session.delete("crowd.last_username")
       end
 
       def save_crowd_cookie
