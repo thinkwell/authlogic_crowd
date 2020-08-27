@@ -164,8 +164,8 @@ module AuthlogicCrowd
         if has_crowd_credentials?
           # HACK: Remove previous login/password errors since we are going to
           # try to validate them with crowd
-          errors.instance_variable_get('@errors').delete(login_field.to_s)
-          errors.instance_variable_get('@errors').delete(password_field.to_s)
+          errors.delete(login_field.to_s)
+          errors.delete(password_field.to_s)
 
           if valid_crowd_credentials?
             self.attempted_record = find_or_create_record_from_crowd
@@ -185,16 +185,16 @@ module AuthlogicCrowd
           end
 
           unless valid_crowd_user_token? && valid_crowd_username?
-            errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
+            errors[:base] << I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token")
           end
 
         elsif authenticated_by_crowd?
           destroy
-          errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
+          errors[:base] << I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token")
         end
 
         unless self.attempted_record && self.attempted_record.valid?
-          errors.add_to_base('record is not valid')
+          errors[:base] << 'record is not valid'
         end
 
         if errors.count == 0
@@ -207,7 +207,7 @@ module AuthlogicCrowd
         end
       rescue SimpleCrowd::CrowdError => e
         Rails.logger.warn "CROWD[#{__method__}]: Unexpected error.  #{e}"
-        errors.add_to_base("Crowd error: #{e}")
+        errors[:base] << "Crowd error: #{e}"
       end
 
       # Validate the crowd.token_key (if one exists)
