@@ -310,7 +310,7 @@ module AuthlogicCrowd
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
             :domain => crowd_cookie_info[:domain],
-            :secure => true,
+            :secure => crowd_cookie_info[:secure],
             :SameSite => 'None',
             :value => @valid_crowd_user[:user_token],
           }
