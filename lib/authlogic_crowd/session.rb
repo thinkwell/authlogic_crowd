@@ -1,9 +1,9 @@
 module AuthlogicCrowd
   module Session
     def self.included(klass)
+      klass.send :prepend, InstanceMethods
       klass.class_eval do
         extend Config
-        include InstanceMethods
 
         attr_accessor :new_registration
 
@@ -81,7 +81,7 @@ module AuthlogicCrowd
     module InstanceMethods
 
       def initialize(*args)
-        super
+        super(*args)
         @valid_crowd_user = {}
       end
 
