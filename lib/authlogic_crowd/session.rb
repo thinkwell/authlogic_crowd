@@ -14,10 +14,10 @@ module AuthlogicCrowd
         after_persisting(:if => [:authenticating_with_crowd?, :persisted_by_crowd?, :explicit_login_from_crowd_token?], :unless => :new_registration?) do |s|
           # The user was persisted via a crowd token (not an explicit login via username/password).
           # Simulate explicit login by executing "save" callbacks.
-          s.before_save
-          s.new_session? ? s.before_create : s.before_update
-          s.new_session? ? s.after_create : s.after_update
-          s.after_save
+          s.run_callbacks :before_save
+          s.run_callbacks s.new_session? ? :before_create : :before_update
+          s.run_callbacks s.new_session? ? :after_create : :after_update
+          s.run_callbacks :after_save
         end
         after_create(:if => :authenticating_with_crowd?, :unless => :new_registration?) do |s|
           synchronizer = s.crowd_synchronizer
