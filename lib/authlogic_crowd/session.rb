@@ -1,9 +1,9 @@
 module AuthlogicCrowd
   module Session
     def self.included(klass)
+      klass.send :prepend, InstanceMethods
       klass.class_eval do
         extend Config
-        include InstanceMethods
 
         attr_accessor :new_registration
 
@@ -14,10 +14,10 @@ module AuthlogicCrowd
         after_persisting(:if => [:authenticating_with_yolk?, :persisted_by_yolk?, :explicit_login_from_yolk_token?], :unless => :new_registration?) do |s|
           # The user was persisted via a yolk token (not an explicit login via username/password).
           # Simulate explicit login by executing "save" callbacks.
-          s.before_save
-          s.new_session? ? s.before_create : s.before_update
-          s.new_session? ? s.after_create : s.after_update
-          s.after_save
+          s.run_callbacks :before_save
+          s.run_callbacks s.new_session? ? :before_create : :before_update
+          s.run_callbacks s.new_session? ? :after_create : :after_update
+          s.run_callbacks :after_save
         end
         after_create(:if => :authenticating_with_yolk?, :unless => :new_registration?) do |s|
           synchronizer = s.yolk_synchronizer
@@ -81,7 +81,7 @@ module AuthlogicCrowd
     module InstanceMethods
 
       def initialize(*args)
-        super
+        super(*args)
         @valid_yolk_user = {}
       end
 
@@ -169,8 +169,8 @@ module AuthlogicCrowd
         if has_yolk_credentials?
           # HACK: Remove previous login/password errors since we are going to
           # try to validate them with yolk
-          errors.instance_variable_get('@errors').delete(login_field.to_s)
-          errors.instance_variable_get('@errors').delete(password_field.to_s)
+          errors.delete(login_field.to_s)
+          errors.delete(password_field.to_s)
 
           if valid_yolk_credentials?
             self.attempted_record = find_or_create_record_from_yolk
@@ -189,16 +189,16 @@ module AuthlogicCrowd
           end
 
           unless valid_yolk_user_token? && valid_yolk_username?
-            errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
+            errors[:base] << I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token")
           end
 
         elsif authenticated_by_yolk?
           destroy
-          errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
+          errors[:base] << I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token")
         end
 
         unless self.attempted_record && self.attempted_record.valid?
-          errors.add_to_base('record is not valid')
+          errors[:base] << 'record is not valid'
         end
 
         if errors.count == 0
@@ -210,9 +210,9 @@ module AuthlogicCrowd
           cache_yolk_auth
         end
       rescue StandardError => e
-        Rails.logger.error "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
+        Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
         Rails.logger.error e.backtrace
-        errors.add_to_base("Yolk error: #{e}")
+        errors[:base] << "Crowd error: #{e}"
       end
 
       # Validate the crowd.token_key (if one exists)
@@ -303,17 +303,19 @@ module AuthlogicCrowd
         end
       end
 
-      # Clear cached yolk information
+      # Clear cached crowd information
       def clear_yolk_auth_cache
-        controller.session.delete_if {|key, val| ["crowd.last_user_token", "crowd.last_auth", "crowd.last_username"].include?(key.to_s)}
+        controller.session.delete("crowd.last_user_token")
+        controller.session.delete("crowd.last_auth")
+        controller.session.delete("crowd.last_username")
       end
 
       def save_yolk_cookie
         if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] != yolk_user_token
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
-            :domain => klass.yolk_cookie_info[:domain],
-            :secure => klass.yolk_cookie_info[:secure],
+            :domain => yolk_cookie_info[:domain],
+            :secure => yolk_cookie_info[:secure],
             :SameSite => 'None',
             :value => @valid_yolk_user[:user_token],
           }
@@ -335,11 +337,11 @@ module AuthlogicCrowd
           last_auth = controller.session[:"crowd.last_auth"]
           if last_user_token
             if !yolk_user_token
-              Rails.logger.info "YOLK: Re-authorization required.  Yolk token does not exist."
+              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does not exist."
             elsif last_user_token != yolk_user_token
-              Rails.logger.info "YOLK: Re-authorization required.  Yolk token does match cached token."
-            elsif last_auth && last_auth <= self.class.yolk_auth_every.ago
-              Rails.logger.info "YOLK: Re-authorization required.  Last authorization was at #{last_auth}."
+              Rails.logger.debug "YOLK: Re-authorization required.  Yolk token does match cached token."
+            elsif last_auth && last_auth <= self.class.yolk_auth_every.seconds.ago
+              Rails.logger.debug "YOLK: Re-authorization required.  Last authorization was at #{last_auth}."
             elsif !last_auth
               Rails.logger.info "YOLK: Re-authorization required.  Unable to determine last authorization time."
             else
@@ -379,7 +381,7 @@ module AuthlogicCrowd
             Rails.logger.info "YOLK :: #{yolk_user_token} : invalidated user token"
           rescue StandardError => e
             Rails.logger.error "YOLK::ERROR[#{__method__}]: #{e.message}"
-            Rails.logger.error e.backtrace            
+            Rails.logger.error e.backtrace
           end
         end
 
@@ -436,7 +438,7 @@ module AuthlogicCrowd
       def should_auto_refresh_user_token?
         last_user_token = controller.session[:"crowd.last_user_token"]
         return false unless controller && controller.session[:last_request_at] && last_user_token == yolk_user_token
-        controller.session[:last_request_at] >= auto_refresh_user_token_for.ago
+        controller.session[:last_request_at] >= auto_refresh_user_token_for.seconds.ago
       end
     end
   end

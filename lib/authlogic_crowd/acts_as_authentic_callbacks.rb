@@ -24,7 +24,7 @@ module AuthlogicCrowd
     METHODS.each do |method|
       class_eval <<-"end_eval", __FILE__, __LINE__
         def #{method}
-          run_callbacks(:#{method}) { |result, object| result == false }
+          run_callbacks(:#{method}) { |result, object| result == nil || result == false }
         end
       end_eval
     end

@@ -114,7 +114,7 @@ module AuthlogicCrowd
             r.yolk_synchronizer.sync_to_yolk
           end
 
-          validate_on_create :must_have_unique_login, :if => [:using_yolk?, :adding_yolk_records?], :unless => :has_yolk_record?
+          validate :must_have_unique_login, :on => :create, :if => [:using_yolk?, :adding_yolk_records?], :unless => :has_yolk_record?
         end
       end
 
