@@ -249,7 +249,7 @@ module AuthlogicCrowd
           end
 
           # Attempt to find user with crowd email field instead of principal name
-          if !@valid_crowd_user[:username] && login =~ Authlogic::Regex.email
+          if !@valid_crowd_user[:username] && login =~ URI::MailTo::EMAIL_REGEXP
             crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
             if crecord
               crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(crecord.username)}
