@@ -314,8 +314,8 @@ module AuthlogicCrowd
         if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] != yolk_user_token
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
-            :domain => yolk_cookie_info[:domain],
-            :secure => yolk_cookie_info[:secure],
+            :domain => klass.yolk_cookie_info[:domain],
+            :secure => klass.yolk_cookie_info[:secure],
             :SameSite => 'None',
             :value => @valid_yolk_user[:user_token],
           }
