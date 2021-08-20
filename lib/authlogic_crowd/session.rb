@@ -254,6 +254,7 @@ module AuthlogicCrowd
           else
             Rails.logger.info "YOLK :: #{login} : NOT authenticated"
             # See if the login exists
+<<<<<<< HEAD
             begin
               crecord = @valid_yolk_user[:record] = yolk_client.get_user(login)
               Rails.logger.info "YOLK :: #{login} : got user"
@@ -261,6 +262,20 @@ module AuthlogicCrowd
             rescue StandardError => error
               Rails.logger.info "YOLK :: #{login} : NO user : #{error.message}"
               @valid_yolk_user[:username] = nil
+=======
+            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(login)}
+            @valid_crowd_user[:username] = crecord ? crecord.username : nil
+          end
+
+          # Attempt to find user with crowd email field instead of principal name
+          if !@valid_crowd_user[:username] && login =~ URI::MailTo::EMAIL_REGEXP
+            crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_by_email(login)}
+            if crecord
+              crecord = @valid_crowd_user[:record] = crowd_fetch {crowd_client.find_user_with_attributes_by_name(crecord.username)}
+              user_token = crowd_fetch {crowd_client.authenticate_user(crecord.username, password)}
+              @valid_crowd_user[:username] = crecord.username
+              @valid_crowd_user[:user_token] = user_token if user_token
+>>>>>>> do-canvas#118-upgrade
             end
           end
 
