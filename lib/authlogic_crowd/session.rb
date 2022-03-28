@@ -169,8 +169,8 @@ module AuthlogicCrowd
         if has_yolk_credentials?
           # HACK: Remove previous login/password errors since we are going to
           # try to validate them with yolk
-          errors.delete(login_field.to_s)
-          errors.delete(password_field.to_s)
+          errors.instance_variable_get('@errors').delete(login_field.to_s)
+          errors.instance_variable_get('@errors').delete(password_field.to_s)
 
           if valid_yolk_credentials?
             self.attempted_record = find_or_create_record_from_yolk
