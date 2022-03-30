@@ -250,7 +250,6 @@ module AuthlogicCrowd
             Rails.logger.error "YOLK :: #{login} : authenticated BUT NO TOKEN: #{user.inspect}" unless user.token
             @valid_yolk_user[:record] = user
             @valid_yolk_user[:user_token] = user.token
-            @valid_yolk_user[:username] = login
           else
             Rails.logger.info "YOLK :: #{login} : NOT authenticated"
             # See if the login exists
