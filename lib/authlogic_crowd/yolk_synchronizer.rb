@@ -56,12 +56,12 @@ module AuthlogicCrowd
             rescue StandardError => error
               Rails.logger.error "YOLK_SYNC :: #{yolk_record.username} : could not add user : #{error.message}"
             end
-          elsif yolk_record.is_dirty?
+          else
             begin
-              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : updating user with changes : #{yolk_record.dirty_attributes.inspect} ..."
+              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : updating user : #{user_attributes.inspect} ..."
               yolk_client.update_user yolk_record.username, user_attributes
               yolk_record.reset
-              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : updated user : #{user_attributes.except(:password).inspect}"
+              Rails.logger.info "YOLK_SYNC :: #{yolk_record.username} : updated user"
             rescue StandardError => error
               Rails.logger.error "YOLK_SYNC :: #{yolk_record.username} : could not update user : #{error.message}"
             end
