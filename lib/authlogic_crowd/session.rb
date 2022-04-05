@@ -1,9 +1,9 @@
 module AuthlogicCrowd
   module Session
     def self.included(klass)
+      klass.send :prepend, InstanceMethods
       klass.class_eval do
         extend Config
-        include InstanceMethods
 
         attr_accessor :new_registration
 
@@ -14,10 +14,10 @@ module AuthlogicCrowd
         after_persisting(:if => [:authenticating_with_yolk?, :persisted_by_yolk?, :explicit_login_from_yolk_token?], :unless => :new_registration?) do |s|
           # The user was persisted via a yolk token (not an explicit login via username/password).
           # Simulate explicit login by executing "save" callbacks.
-          s.before_save
-          s.new_session? ? s.before_create : s.before_update
-          s.new_session? ? s.after_create : s.after_update
-          s.after_save
+          s.run_callbacks :before_save
+          s.run_callbacks s.new_session? ? :before_create : :before_update
+          s.run_callbacks s.new_session? ? :after_create : :after_update
+          s.run_callbacks :after_save
         end
         after_create(:if => :authenticating_with_yolk?, :unless => :new_registration?) do |s|
           synchronizer = s.yolk_synchronizer
@@ -81,7 +81,7 @@ module AuthlogicCrowd
     module InstanceMethods
 
       def initialize(*args)
-        super
+        super(*args)
         @valid_yolk_user = {}
       end
 
@@ -169,8 +169,8 @@ module AuthlogicCrowd
         if has_yolk_credentials?
           # HACK: Remove previous login/password errors since we are going to
           # try to validate them with yolk
-          errors.instance_variable_get('@errors').delete(login_field.to_s)
-          errors.instance_variable_get('@errors').delete(password_field.to_s)
+          errors.delete(login_field.to_s)
+          errors.delete(password_field.to_s)
 
           if valid_yolk_credentials?
             self.attempted_record = find_or_create_record_from_yolk
@@ -189,16 +189,16 @@ module AuthlogicCrowd
           end
 
           unless valid_yolk_user_token? && valid_yolk_username?
-            errors.add_to_base(I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token"))
+            errors[:base] << I18n.t('error_messages.crowd_invalid_user_token', :default => "invalid user token")
           end
 
         elsif authenticated_by_yolk?
           destroy
-          errors.add_to_base(I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token"))
+          errors[:base] << I18n.t('error_messages.crowd_missing_using_token', :default => "missing user token")
         end
 
         unless self.attempted_record && self.attempted_record.valid?
-          errors.add_to_base('record is not valid')
+          errors[:base] << 'record is not valid'
         end
 
         if errors.count == 0
@@ -212,7 +212,7 @@ module AuthlogicCrowd
       rescue StandardError => e
         Rails.logger.warn "YOLK::ERROR[#{__method__}]: Unexpected error.  #{e}"
         Rails.logger.error e.backtrace
-        errors.add_to_base("Crowd error: #{e}")
+        errors[:base] << "Crowd error: #{e}"
       end
 
       # Validate the crowd.token_key (if one exists)
