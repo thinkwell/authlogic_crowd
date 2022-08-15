@@ -135,7 +135,7 @@ module AuthlogicCrowd
           begin
             login = self.send(self.class.login_field)
             @yolk_record = yolk_client.get_user(login)
-            Rails.logger.info "YOLK :: #{login} : got yolk record"
+            Rails.logger.debug "YOLK :: #{login} : got yolk record"
           rescue StandardError => e
             Rails.logger.info "YOLK :: #{login} : NO yolk record : #{e.message}"
           end

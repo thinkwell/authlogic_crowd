@@ -1,4 +1,3 @@
-require "simple_crowd"
 require "authlogic_crowd/acts_as_authentic"
 require "authlogic_crowd/session"
 require "authlogic_crowd/acts_as_authentic_callbacks"
