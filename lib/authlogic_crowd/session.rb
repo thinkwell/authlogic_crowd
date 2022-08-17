@@ -304,7 +304,7 @@ module AuthlogicCrowd
       end
 
       def save_crowd_cookie
-        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != (controller && controller.cookies[:"crowd.token_key"])
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
             :domain => crowd_cookie_info[:domain],
