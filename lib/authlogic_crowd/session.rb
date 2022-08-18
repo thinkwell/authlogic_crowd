@@ -132,7 +132,7 @@ module AuthlogicCrowd
 
       # Use the Yolk to "log in" the user using the crowd.token_key
       # cookie/parameter.  If the token_key is valid and returns a valid Yolk
-      # user, the find_by_login_method is called to find the appropriate local
+      # user, the record_selection_method is called to find the appropriate local
       # user/record.
       #
       # If no *local* record is found and auto_register is enabled (default)
@@ -354,7 +354,7 @@ module AuthlogicCrowd
 
       def find_or_create_record_from_yolk
         return nil unless yolk_username
-        record = search_for_record_from_yolk(find_by_login_method, yolk_username)
+        record = search_for_record_from_yolk(self.class.record_selection_method, yolk_username)
 
         if !record && auto_register? && can_auto_register?(yolk_username)
           synchronizer = yolk_synchronizer
@@ -366,8 +366,8 @@ module AuthlogicCrowd
         record
       end
 
-      def search_for_record_from_yolk(find_by_login_method, yolk_username)
-        search_for_record(find_by_login_method, yolk_username)
+      def search_for_record_from_yolk(record_selection_method, yolk_username)
+        search_for_record(record_selection_method, yolk_username)
       end
 
       # Logout of yolk and remove the yolk cookie.
