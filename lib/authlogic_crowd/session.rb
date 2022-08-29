@@ -313,6 +313,9 @@ module AuthlogicCrowd
             :value => @valid_crowd_user[:user_token],
           }
         end
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token_etag
+          controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
+        end
       end
 
       def destroy_crowd_cookie
@@ -383,7 +386,11 @@ module AuthlogicCrowd
       end
 
       def crowd_user_token
-        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"])
+        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || crowd_user_token_etag)
+      end
+
+      def crowd_user_token_etag
+        controller && controller.headers['ETag'].match(/crowd.token_key=(.*)/)&.captures&.first
       end
 
       def authenticated_by_crowd?
