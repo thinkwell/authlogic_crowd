@@ -325,8 +325,10 @@ module AuthlogicCrowd
       end
 
       def set_etag_header
-        controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
-        Rails.logger.info "YOLK :: set ETag header : #{controller.headers['ETag']}"
+        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token]
+          controller.headers['ETag'] = "crowd.token_key=#{@valid_yolk_user[:user_token]}"
+          Rails.logger.info "YOLK :: set ETag header : #{controller.headers['ETag']}"
+        end
       end
 
       def destroy_yolk_cookie
