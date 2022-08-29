@@ -205,6 +205,8 @@ module AuthlogicCrowd
           # Set crowd.token_key cookie
           save_yolk_cookie
 
+          set_etag_header
+
           # Cache yolk authorization to make future requests faster (if
           # yolk_auth_every config is enabled)
           cache_yolk_auth
@@ -320,9 +322,11 @@ module AuthlogicCrowd
             :value => @valid_yolk_user[:user_token],
           }
         end
-        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token_etag
-          controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
-        end
+      end
+
+      def set_etag_header
+        controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
+        Rails.logger.info "YOLK :: set ETag header : #{controller.headers['ETag']}"
       end
 
       def destroy_yolk_cookie
