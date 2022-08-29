@@ -405,7 +405,7 @@ module AuthlogicCrowd
       end
 
       def yolk_user_token_etag
-        controller && controller.headers['ETag'].match(/crowd.token_key=(.*)/)&.captures&.first
+        controller && controller.headers['ETag']&.match(/crowd.token_key=(.*)/)&.captures&.first
       end
 
       def authenticated_by_yolk?
