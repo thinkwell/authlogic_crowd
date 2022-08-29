@@ -311,7 +311,7 @@ module AuthlogicCrowd
       end
 
       def save_yolk_cookie
-        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] != yolk_user_token
+        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token] != (controller && controller.cookies[:"crowd.token_key"])
           controller.params.delete("crowd.token_key")
           controller.cookies[:"crowd.token_key"] = {
             :domain => yolk_cookie_info[:domain],
@@ -319,6 +319,9 @@ module AuthlogicCrowd
             :SameSite => 'None',
             :value => @valid_yolk_user[:user_token],
           }
+        end
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token_etag
+          controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
         end
       end
 
@@ -392,7 +395,11 @@ module AuthlogicCrowd
       end
 
       def yolk_user_token
-        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"])
+        controller && (controller.params["crowd.token_key"] || controller.cookies[:"crowd.token_key"] || yolk_user_token_etag)
+      end
+
+      def yolk_user_token_etag
+        controller && controller.headers['ETag'].match(/crowd.token_key=(.*)/)&.captures&.first
       end
 
       def authenticated_by_yolk?
