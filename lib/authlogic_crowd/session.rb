@@ -201,6 +201,8 @@ module AuthlogicCrowd
           # Set crowd.token_key cookie
           save_crowd_cookie
 
+          set_etag_header
+
           # Cache crowd authorization to make future requests faster (if
           # crowd_auth_every config is enabled)
           cache_crowd_auth
@@ -313,8 +315,12 @@ module AuthlogicCrowd
             :value => @valid_crowd_user[:user_token],
           }
         end
-        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token] != crowd_user_token_etag
-          controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
+      end
+
+      def set_etag_header
+        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token]
+          controller.headers['ETag'] = "crowd.token_key=#{@valid_yolk_user[:user_token]}"
+          Rails.logger.info "YOLK :: set ETag header : #{controller.headers['ETag']}"
         end
       end
 
@@ -390,7 +396,7 @@ module AuthlogicCrowd
       end
 
       def crowd_user_token_etag
-        controller && controller.headers['ETag'].match(/crowd.token_key=(.*)/)&.captures&.first
+        controller && controller.headers['ETag']&.match(/crowd.token_key=(.*)/)&.captures&.first
       end
 
       def authenticated_by_crowd?
