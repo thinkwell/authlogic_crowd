@@ -318,9 +318,9 @@ module AuthlogicCrowd
       end
 
       def set_etag_header
-        if @valid_yolk_user[:user_token] && @valid_yolk_user[:user_token]
-          controller.headers['ETag'] = "crowd.token_key=#{@valid_yolk_user[:user_token]}"
-          Rails.logger.info "YOLK :: set ETag header : #{controller.headers['ETag']}"
+        if @valid_crowd_user[:user_token] && @valid_crowd_user[:user_token]
+          controller.headers['ETag'] = "crowd.token_key=#{@valid_crowd_user[:user_token]}"
+          Rails.logger.info "CROWD :: set ETag header : #{controller.headers['ETag']}"
         end
       end
 
